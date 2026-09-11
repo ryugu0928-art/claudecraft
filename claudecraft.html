@@ -1,0 +1,2016 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<title>Voxel Craft</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<style>
+  html, body {
+    margin: 0; padding: 0; overflow: hidden;
+    width: 100%; height: 100%;
+    background: #7ec8ff;
+    font-family: 'Segoe UI', 'Hiragino Sans', sans-serif;
+    user-select: none;
+  }
+  #canvas-container { position: fixed; top:0; left:0; width:100%; height:100%; }
+  canvas { display: block; }
+
+  /* Crosshair */
+  #crosshair {
+    position: fixed; top:50%; left:50%; transform: translate(-50%,-50%);
+    width: 20px; height: 20px; pointer-events: none; z-index: 10;
+  }
+  #crosshair::before, #crosshair::after {
+    content: ''; position: absolute; background: rgba(255,255,255,0.85);
+    box-shadow: 0 0 2px rgba(0,0,0,0.6);
+  }
+  #crosshair::before { width: 2px; height: 20px; left: 9px; top: 0; }
+  #crosshair::after { width: 20px; height: 2px; top: 9px; left: 0; }
+
+  /* Hotbar */
+  #hotbar {
+    position: fixed; bottom: 18px; left: 50%; transform: translateX(-50%);
+    display: flex; gap: 4px; z-index: 10;
+    background: rgba(0,0,0,0.25);
+    padding: 6px; border-radius: 6px;
+  }
+  .slot {
+    width: 52px; height: 52px; border: 2px solid rgba(255,255,255,0.4);
+    border-radius: 4px; background: rgba(20,20,20,0.55);
+    display: flex; align-items: center; justify-content: center;
+    position: relative; cursor: pointer;
+    box-sizing: border-box;
+  }
+  .slot.active {
+    border-color: #fff;
+    box-shadow: 0 0 0 2px rgba(255,255,255,0.5) inset, 0 0 8px rgba(255,255,255,0.7);
+    background: rgba(60,60,60,0.6);
+  }
+  .slot .swatch {
+    width: 34px; height: 34px; border-radius: 3px;
+    box-shadow: inset -3px -4px 0 rgba(0,0,0,0.25), inset 3px 4px 0 rgba(255,255,255,0.15);
+  }
+  .slot .key {
+    position: absolute; top: 2px; left: 4px; font-size: 10px; color: #fff;
+    text-shadow: 0 0 3px #000, 0 0 3px #000;
+  }
+
+  /* Item name popup (fades out) */
+  #item-name-display {
+    position: fixed; bottom: 92px; left: 50%; transform: translateX(-50%);
+    z-index: 11; pointer-events: none;
+    color: #fff; font-size: 17px; font-weight: 700;
+    text-shadow: 2px 2px 0 rgba(0,0,0,0.6), -1px -1px 0 rgba(0,0,0,0.6),
+                 1px -1px 0 rgba(0,0,0,0.6), -1px 1px 0 rgba(0,0,0,0.6);
+    opacity: 0;
+    white-space: nowrap;
+  }
+  #item-name-display.show {
+    animation: item-name-fade 2s ease-out forwards;
+  }
+  @keyframes item-name-fade {
+    0%   { opacity: 1; transform: translateX(-50%) translateY(0); }
+    65%  { opacity: 1; transform: translateX(-50%) translateY(0); }
+    100% { opacity: 0; transform: translateX(-50%) translateY(-6px); }
+  }
+
+  /* Info / instructions overlay */
+  #start-screen {
+    position: fixed; inset: 0; z-index: 100;
+    background: linear-gradient(180deg, #4a90d9 0%, #7ec8ff 55%, #9fd6a0 100%);
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    color: #fff; text-align: center;
+  }
+  #start-screen h1 {
+    font-size: 52px; margin: 0 0 6px 0; letter-spacing: 1px;
+    text-shadow: 3px 3px 0 rgba(0,0,0,0.25);
+    font-weight: 800;
+  }
+  #start-screen p.sub {
+    margin: 0 0 28px 0; font-size: 15px; opacity: 0.85;
+  }
+  #start-btn {
+    padding: 14px 42px; font-size: 20px; font-weight: 700;
+    background: #5cb85c; color: #fff; border: 3px solid #3d8b3d;
+    border-radius: 6px; cursor: pointer;
+    box-shadow: 0 4px 0 #3d8b3d;
+    transition: transform 0.05s;
+  }
+  #start-btn:active { transform: translateY(4px); box-shadow: none; }
+  #instructions {
+    margin-top: 26px; font-size: 13px; line-height: 1.9; opacity: 0.9;
+    background: rgba(0,0,0,0.18); padding: 16px 24px; border-radius: 8px;
+  }
+  #instructions b { color: #fff700; }
+
+  #seed-panel {
+    margin-bottom: 20px; display: flex; flex-direction: column; align-items: center; gap: 6px;
+  }
+  #seed-panel label {
+    font-size: 12px; opacity: 0.85; letter-spacing: 1px;
+  }
+  #seed-row { display: flex; gap: 6px; }
+  #seed-input {
+    width: 240px; padding: 9px 12px; font-size: 14px;
+    border: 2px solid rgba(255,255,255,0.5); border-radius: 5px;
+    background: rgba(0,0,0,0.35); color: #fff; text-align: center;
+    outline: none;
+  }
+  #seed-input::placeholder { color: rgba(255,255,255,0.55); }
+  #seed-input:focus { border-color: #fff700; }
+  #random-seed-btn {
+    width: 40px; font-size: 18px; cursor: pointer;
+    border: 2px solid rgba(255,255,255,0.5); border-radius: 5px;
+    background: rgba(0,0,0,0.35); color: #fff;
+  }
+  #random-seed-btn:hover { background: rgba(255,255,255,0.15); }
+  #current-seed-display {
+    position: fixed; top: 12px; right: 14px; z-index: 10;
+    color: #fff; font-size: 12px; text-shadow: 0 0 3px #000, 0 0 3px #000;
+    background: rgba(0,0,0,0.25); padding: 6px 10px; border-radius: 6px;
+  }
+
+  #hud-top {
+    position: fixed; top: 12px; left: 12px; z-index: 10;
+    color: #fff; font-size: 13px; text-shadow: 0 0 4px #000, 0 0 4px #000;
+    background: rgba(0,0,0,0.25); padding: 8px 12px; border-radius: 6px;
+    line-height: 1.6;
+  }
+
+  #pause-hint {
+    position: fixed; bottom: 12px; right: 14px; z-index: 10;
+    color: #fff; font-size: 12px; text-shadow: 0 0 3px #000;
+    opacity: 0.75;
+  }
+</style>
+</head>
+<body>
+
+<div id="canvas-container"></div>
+<div id="crosshair"></div>
+
+<div id="hud-top">
+  座標: <span id="coords">0, 0, 0</span><br>
+  FPS: <span id="fps">--</span><br>
+  描画距離: <span id="render-distance">4</span>チャンク　演算距離: <span id="sim-distance">4</span>チャンク<br>
+  読み込み済みチャンク: <span id="chunk-count">--</span><br>
+  視界内チャンク: <span id="visible-chunk-count">--</span>（フラスタムカリング後）<br>
+  読み込みキュー: <span id="queue-count">--</span>
+</div>
+
+<div id="item-name-display"></div>
+<div id="hotbar"></div>
+<div id="pause-hint">ESC でカーソル解除 / クリックで再開</div>
+<div id="current-seed-display">シード: <span id="seed-display-value">--</span></div>
+
+<div id="start-screen">
+  <h1>⛏ Voxel Craft</h1>
+  <p class="sub">Three.js製 ミニ・マインクラフト風3Dサンドボックス</p>
+  <div id="seed-panel">
+    <label for="seed-input">ワールドシード</label>
+    <div id="seed-row">
+      <input type="text" id="seed-input" placeholder="空欄でランダム生成">
+      <button id="random-seed-btn" title="ランダムなシードを生成">🎲</button>
+    </div>
+  </div>
+  <button id="start-btn">プレイ開始</button>
+  <div id="instructions">
+    <b>W A S D</b>：移動　　<b>スペース</b>：ジャンプ　　<b>マウス</b>：視点操作<br>
+    <b>左クリック</b>：ブロックを壊す　　<b>右クリック</b>：ブロックを置く<br>
+    <b>1〜9 or マウスホイール</b>：ブロック選択　　<b>W連打（ダブルタップ）</b>：ダッシュ<br>
+    <b>ダッシュ中にジャンプ</b>：ダッシュジャンプでさらに加速
+  </div>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script>
+(function(){
+
+// ============================================================
+// 基本セットアップ
+// ============================================================
+const container = document.getElementById('canvas-container');
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x7ec8ff);
+scene.fog = new THREE.Fog(0x7ec8ff, 40, 130);
+
+const BASE_FOV = 70;
+const SPRINT_FOV = BASE_FOV * 1.1;
+const camera = new THREE.PerspectiveCamera(BASE_FOV, window.innerWidth/window.innerHeight, 0.1, 1000);
+
+const renderer = new THREE.WebGLRenderer({ antialias: true });
+renderer.setSize(window.innerWidth, window.innerHeight);
+renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFShadowMap; // ソフトシャドウ(PCFSoft)は非常に重いため軽量なPCFに変更
+container.appendChild(renderer.domElement);
+
+window.addEventListener('resize', () => {
+  camera.aspect = window.innerWidth/window.innerHeight;
+  camera.updateProjectionMatrix();
+  renderer.setSize(window.innerWidth, window.innerHeight);
+});
+
+// ライティング
+const hemiLight = new THREE.HemisphereLight(0xbfe3ff, 0x5a8c3a, 0.9);
+scene.add(hemiLight);
+
+const sunLight = new THREE.DirectionalLight(0xfff3d6, 1.0);
+sunLight.position.set(60, 90, 40);
+sunLight.castShadow = true;
+// シャドウマップ解像度を下げてGPU負荷を軽減（2048は非常に重いため1024に）
+sunLight.shadow.mapSize.width = 1024;
+sunLight.shadow.mapSize.height = 1024;
+sunLight.shadow.camera.left = -50;
+sunLight.shadow.camera.right = 50;
+sunLight.shadow.camera.top = 50;
+sunLight.shadow.camera.bottom = -50;
+sunLight.shadow.camera.near = 1;
+sunLight.shadow.camera.far = 200;
+sunLight.shadow.bias = -0.0015;
+scene.add(sunLight);
+
+// ============================================================
+// ブロック定義
+// ============================================================
+const BLOCK = {
+  AIR: 0,
+  GRASS: 1,
+  DIRT: 2,
+  STONE: 3,
+  SAND: 4,
+  WOOD: 5,
+  LEAVES: 6,
+  PLANK: 7,
+  WATER: 8,
+  BRICK: 9,
+  COBBLESTONE: 10,
+};
+
+const BLOCK_COLORS = {
+  [BLOCK.GRASS]:  { top: 0x6cbf4a, side: 0x8a6b45, bottom: 0x6b4a2f },
+  [BLOCK.DIRT]:   { all: 0x6b4a2f },
+  [BLOCK.STONE]:  { all: 0x8a8a8a },
+  [BLOCK.SAND]:   { all: 0xe0d29a },
+  [BLOCK.WOOD]:   { top: 0x9a7b4f, side: 0x6b4c2a, bottom: 0x9a7b4f },
+  [BLOCK.LEAVES]: { all: 0x4a8f3c },
+  [BLOCK.PLANK]:  { all: 0xb98a55 },
+  [BLOCK.BRICK]:  { all: 0xa8503c },
+  [BLOCK.COBBLESTONE]: { all: 0x6e6e6e },
+  // WATERは実際のブロック描画では専用の半透明マテリアル(waterMat)を使うため
+  // getMaterials()からは呼ばれないが、ホットバーのスワッチ色表示のために登録しておく
+  [BLOCK.WATER]: { all: 0x4fa8e0 },
+};
+
+// 表面ノイズ用の簡易テクスチャ生成
+function makeTexture(baseColor, noiseAmount, seed) {
+  const size = 16;
+  const canvas = document.createElement('canvas');
+  canvas.width = size; canvas.height = size;
+  const ctx = canvas.getContext('2d');
+  const c = new THREE.Color(baseColor);
+  let s = seed;
+  function rand() { s = (s * 9301 + 49297) % 233280; return s / 233280; }
+  for (let y = 0; y < size; y++) {
+    for (let x = 0; x < size; x++) {
+      const n = (rand() - 0.5) * noiseAmount;
+      const r = Math.max(0, Math.min(1, c.r + n));
+      const g = Math.max(0, Math.min(1, c.g + n));
+      const b = Math.max(0, Math.min(1, c.b + n));
+      ctx.fillStyle = `rgb(${r*255|0},${g*255|0},${b*255|0})`;
+      ctx.fillRect(x, y, 1, 1);
+    }
+  }
+  const tex = new THREE.CanvasTexture(canvas);
+  tex.magFilter = THREE.NearestFilter;
+  tex.minFilter = THREE.NearestFilter;
+  return tex;
+}
+
+// ブロックごとにマテリアル配列 [px, nx, py, ny, pz, nz] を作る
+const materialCache = {};
+function getMaterials(blockId) {
+  if (materialCache[blockId]) return materialCache[blockId];
+  const def = BLOCK_COLORS[blockId];
+  let top, side, bottom;
+  if (def.all !== undefined) {
+    top = side = bottom = def.all;
+  } else {
+    top = def.top; side = def.side; bottom = def.bottom;
+  }
+  const seedBase = blockId * 1000 + 7;
+  const topMat = new THREE.MeshLambertMaterial({ map: makeTexture(top, 0.12, seedBase+1) });
+  const sideMat = new THREE.MeshLambertMaterial({ map: makeTexture(side, 0.10, seedBase+2) });
+  const bottomMat = new THREE.MeshLambertMaterial({ map: makeTexture(bottom, 0.10, seedBase+3) });
+  const mats = [sideMat, sideMat, topMat, bottomMat, sideMat, sideMat];
+  materialCache[blockId] = mats;
+  return mats;
+}
+
+// ============================================================
+// ワールドデータ（チャンクベースの無限ワールド）
+// ============================================================
+const CHUNK_SIZE = 16; // 1チャンク = 16x16ブロック（高さ方向は無制限）
+const RENDER_DISTANCE = 4; // 描画距離（チャンク数）
+// 演算距離（チャンク数）＝地形生成・ブロック処理を行う範囲。
+// RENDER_DISTANCEより必ず1以上広く取る必要がある。理由:
+// メッシュ構築（面カリング）は、チャンクの端のブロックについて隣接チャンクのブロックを
+// 参照して「隠れているか」を判定する。もしSIM_DISTANCEがRENDER_DISTANCEと同じだと、
+// 描画範囲の一番外側のチャンクをメッシュ化する時点で、その外側(描画範囲の外)の
+// 地形データがまだ生成されておらず、常に「空気」として扱われてしまう。
+// その結果、本来は水や地形で隠れているはずのチャンク境界のブロックが
+// 「隠れていない」と誤判定され、面カリングされずに描画されてしまう
+// （水面がチャンクの継ぎ目でまだら模様に見える不具合の原因だった）。
+const SIM_DISTANCE = RENDER_DISTANCE + 1;
+
+const world = new Map(); // key "x,y,z" -> blockId （ブロック本体データ、全チャンク共通の1つの辞書）
+const loadedChunks = new Map(); // key "cx,cz" -> { generated: true, blocks: Set of "x,y,z" in this chunk }
+
+// ------ 水の流動（広がり）関連 ------
+// 水源ブロックからの「重み」を管理する。仕様(Wiki準拠):
+//   ・水は水源ブロックから水平方向に最大7ブロックまで流れる
+//   ・重みが大きいほど流れの高さは低くなる(水源からの距離に応じて浅くなる)
+//   ・ブロックで止められるか、奈落に落ちるまで無限に下へ広がる
+// waterLevelは水ブロックだけに存在する補助データで、0=水源、1〜7=流れ（数字が大きいほど遠い/浅い）。
+// worldのブロックIDだけでは「水源か流れか」「どれだけ遠いか」を区別できないため、別のMapで持つ。
+const waterLevel = new Map();
+const WATER_MAX_SPREAD = 7; // 水平方向に広がる最大距離（水源からの重み上限）
+// 流動調整表（Wikiの表に基づく高さの目安）。範囲を1つの代表値に単純化して使う。
+// [1ブロックの重みindex] -> 高さ(0〜1)。index 0 = 水源(高さ1)。
+const WATER_HEIGHT_BY_LEVEL = [1, 0.875, 0.6875, 0.5625, 0.4375, 0.3125, 0.1875, 0.1875];
+
+function key(x,y,z){ return x+','+y+','+z; }
+function chunkKeyOf(cx, cz){ return cx+','+cz; }
+function worldToChunk(x, z){ return [Math.floor(x / CHUNK_SIZE), Math.floor(z / CHUNK_SIZE)]; }
+
+function getBlock(x,y,z){
+  const v = world.get(key(x,y,z));
+  return v === undefined ? BLOCK.AIR : v;
+}
+function setBlock(x,y,z,id){
+  if (id === BLOCK.AIR) {
+    world.delete(key(x,y,z));
+    waterLevel.delete(key(x,y,z));
+  } else {
+    world.set(key(x,y,z), id);
+    // 水以外のブロックを置いた場合は、その位置に残っていたかもしれない水の重み情報を消しておく
+    if (id !== BLOCK.WATER) waterLevel.delete(key(x,y,z));
+  }
+}
+
+// ------ シード値付き乱数生成器（Mulberry32） ------
+function mulberry32(seed) {
+  return function() {
+    seed |= 0; seed = (seed + 0x6D2B79F5) | 0;
+    let t = Math.imul(seed ^ (seed >>> 15), 1 | seed);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
+// 文字列/数値シードを32bit整数のハッシュに変換
+function hashSeed(str) {
+  str = String(str);
+  let h = 1779033703 ^ str.length;
+  for (let i = 0; i < str.length; i++) {
+    h = Math.imul(h ^ str.charCodeAt(i), 3432918353);
+    h = (h << 13) | (h >>> 19);
+  }
+  return (h ^ (h >>> 16)) >>> 0;
+}
+
+// 現在のワールドシード（起動時にランダム生成、後で再生成可能）
+let worldSeed = hashSeed(Date.now() + '-' + Math.random());
+let seedOffsetX = 0, seedOffsetZ = 0; // シードごとにノイズ座標をずらしてワールドごとに変化させる
+
+function applySeed(seedValue) {
+  worldSeed = hashSeed(seedValue);
+  const rng = mulberry32(worldSeed);
+  // シードから大きくずらしたオフセットを作ることで、同じ座標でも全く違う地形になる
+  seedOffsetX = Math.floor(rng() * 100000) - 50000;
+  seedOffsetZ = Math.floor(rng() * 100000) - 50000;
+}
+applySeed(worldSeed);
+
+// ------ 簡易パーリン風ノイズ（値ノイズ + 補間、シード対応） ------
+function hashNoise(x, y) {
+  x += seedOffsetX; y += seedOffsetZ;
+  let n = x*374761393 + y*668265263 + worldSeed*2654435761;
+  n = (n ^ (n >> 13)) * 1274126177;
+  n = n ^ (n >> 16);
+  return ((n & 0x7fffffff) / 0x7fffffff);
+}
+function smoothNoise(x, y) {
+  const x0 = Math.floor(x), y0 = Math.floor(y);
+  const x1 = x0+1, y1 = y0+1;
+  const sx = x - x0, sy = y - y0;
+  const n00 = hashNoise(x0,y0), n10 = hashNoise(x1,y0);
+  const n01 = hashNoise(x0,y1), n11 = hashNoise(x1,y1);
+  const ix0 = n00 + (n10-n00)*sx;
+  const ix1 = n01 + (n11-n01)*sx;
+  return ix0 + (ix1-ix0)*sy;
+}
+const SEA_LEVEL = 63; // 海面の高さ。仕様指定によりY=63以下を水で埋める（水面の最上段はY=63）
+
+// ------ バイオーム判定 ------
+// 大きなスケールのノイズで「陸地」か「海」かを決める。
+// 陸地よりずっと広い範囲で緩やかに変化させたいので、terrainHeightの地形ノイズよりも
+// さらに低い周波数(0.008)を使う。
+function biomeNoise(x, z) {
+  return smoothNoise(x*0.008 + 1000, z*0.008 - 1000); // 地形ノイズと座標がかぶらないようオフセットする
+}
+// 海バイオームか判定する際の中心閾値（浜辺遷移の中心にあたる）
+const BIOME_OCEAN_THRESHOLD = 0.45;
+// 閾値の前後どれくらいの幅で「陸→浜辺→海」を滑らかに繋ぐか。
+// この幅が浜辺の帯の広さに直結する（狭すぎると崖のまま、広すぎるとぼやけた地形になる）
+const BEACH_TRANSITION_WIDTH = 0.05;
+// 0=完全に陸地, 1=完全に海。閾値付近ではその間を滑らかに補間する値を返す。
+// これを使って地形の高さ自体を陸から海へなだらかに落とし込み、急な崖ではなく
+// 浜辺・海岸線として機能する遷移帯を作る。
+function oceanBlend(x, z) {
+  const n = biomeNoise(x, z);
+  const t = (BIOME_OCEAN_THRESHOLD + BEACH_TRANSITION_WIDTH - n) / (BEACH_TRANSITION_WIDTH * 2);
+  return Math.max(0, Math.min(1, t));
+}
+
+function terrainHeight(x, z) {
+  // 陸地の高さ(Y=63〜70)と、海底の高さ(Y=52〜60)をそれぞれ計算し、
+  // oceanBlend()の値で滑らかに混ぜ合わせる。0（陸）〜1（海）の間の値のときは
+  // 浜辺の緩やかな下り坂になる。
+  let landH = 0;
+  landH += smoothNoise(x*0.05, z*0.05) * 5;
+  landH += smoothNoise(x*0.12, z*0.12) * 2;
+  landH = landH + 63;
+
+  let oceanH = 0;
+  oceanH += smoothNoise(x*0.05, z*0.05) * 6;
+  oceanH += smoothNoise(x*0.12, z*0.12) * 2;
+  oceanH = oceanH + 52;
+
+  const blend = oceanBlend(x, z);
+  const h = landH + (oceanH - landH) * blend;
+  return Math.floor(h);
+}
+
+// ------ 地形生成（1チャンク分だけを生成する） ------
+// 木の一部が隣接チャンクにはみ出すことがあるため、少し余裕を持たせて生成する
+function generateChunk(cx, cz) {
+  const ckey = chunkKeyOf(cx, cz);
+  if (loadedChunks.has(ckey)) return; // 生成済み
+  loadedChunks.set(ckey, { generated: true });
+
+  const startX = cx * CHUNK_SIZE;
+  const startZ = cz * CHUNK_SIZE;
+
+  // 浜辺（ビーチ）として砂になる高さの範囲。
+  // 海面(SEA_LEVEL=63)より少し低い場所(水中の浅瀬)から、少し高い場所(波打ち際の陸側)まで
+  // 帯状に砂を敷くことで、陸地の草から海への急な切り替わりではなく
+  // 「浜辺」として認識できる見た目にする。
+  const BEACH_MIN_Y = SEA_LEVEL - 3;
+  const BEACH_MAX_Y = SEA_LEVEL + 1;
+
+  for (let dx = 0; dx < CHUNK_SIZE; dx++) {
+    for (let dz = 0; dz < CHUNK_SIZE; dz++) {
+      const x = startX + dx;
+      const z = startZ + dz;
+      const h = terrainHeight(x, z);
+      const isBeach = h >= BEACH_MIN_Y && h <= BEACH_MAX_Y;
+      // 地表から一定の深さ(20ブロック)だけ埋めれば十分。
+      // 地形は常にY=63〜70付近なので、Y=0から埋めると使わない分まで大量に
+      // ブロックデータを生成してしまい、メモリ・生成負荷が無駄に増える。
+      const fillBottom = Math.max(0, h - 20);
+      for (let y = fillBottom; y <= h; y++) {
+        let b;
+        if (y === h) b = BLOCK.GRASS;
+        else if (y > h - 4) b = BLOCK.DIRT;
+        else b = BLOCK.STONE;
+        // 海の中（水面より低い）は常に砂、浜辺の帯に入る高さも表層から数ブロックは砂にする
+        if (h < SEA_LEVEL) {
+          b = BLOCK.SAND;
+        } else if (isBeach && y > h - 3) {
+          b = BLOCK.SAND;
+        }
+        setBlock(x, y, z, b);
+      }
+      // 水を張る（海面レベル以下）。
+      // 仕様: 既にその位置にブロックがある場合は水で上書きしない。
+      // これは、今後「岸・海岸線・浜辺」のような地形やオブジェクトを先に配置してから
+      // 水を流し込む、という生成順序にしたときに、意図せず岸のブロックが水に置き換わって
+      // しまわないようにするための安全策。今の時点では地形生成直後の空気部分にしか
+      // 水は入らないため挙動は変わらないが、将来ここに岸の生成処理を挟んでも安全なようにする。
+      //
+      // 海の水はすべて「水源ブロック」(重み0)として登録する。水源は本家と同様に無限に
+      // 水を供給できる扱いで、ここを起点に横穴を掘ったりすると水平方向に流れ出していく。
+      if (h < SEA_LEVEL) {
+        for (let y = h+1; y <= SEA_LEVEL; y++) {
+          if (getBlock(x, y, z) !== BLOCK.AIR) continue; // 既に何かブロックがあれば上書きしない
+          setBlock(x, y, z, BLOCK.WATER);
+          waterLevel.set(key(x, y, z), 0);
+        }
+      }
+    }
+  }
+
+  // ------ 木をランダム配置（チャンク座標から決定的に乱数を導出し、常に同じ結果になるようにする） ------
+  function placeTree(x, z) {
+    const h = terrainHeight(x, z);
+    if (h < SEA_LEVEL) return; // 水上には生えない
+    if (getBlock(x, h, z) !== BLOCK.GRASS) return;
+    const trunkH = 4 + Math.floor(Math.abs(hashNoise(x*3.1, z*5.7))*2);
+    for (let i = 1; i <= trunkH; i++) setBlock(x, h+i, z, BLOCK.WOOD);
+    const topY = h + trunkH;
+    for (let ddx = -2; ddx <= 2; ddx++) {
+      for (let ddz = -2; ddz <= 2; ddz++) {
+        for (let ddy = -1; ddy <= 1; ddy++) {
+          if (Math.abs(ddx)+Math.abs(ddz)+Math.abs(ddy) <= 3 && !(ddx===0&&ddz===0&&ddy<=0)) {
+            const lx=x+ddx, ly=topY+ddy, lz=z+ddz;
+            if (getBlock(lx,ly,lz) === BLOCK.AIR) setBlock(lx,ly,lz, BLOCK.LEAVES);
+          }
+        }
+      }
+    }
+    setBlock(x, topY+2, z, BLOCK.LEAVES);
+  }
+
+  // このチャンク専用の決定的な乱数（ワールドシード + チャンク座標から導出）
+  const chunkSeed = (worldSeed ^ Math.imul(cx, 0x9E3779B1) ^ Math.imul(cz, 0x85EBCA77)) >>> 0;
+  const treeRng = mulberry32(chunkSeed);
+  const treeCount = 3; // チャンクあたりの木の本数（26本/48x48だった元の密度に近い値）
+  for (let i = 0; i < treeCount; i++) {
+    const tx = startX + Math.floor(treeRng() * CHUNK_SIZE);
+    const tz = startZ + Math.floor(treeRng() * CHUNK_SIZE);
+    placeTree(tx, tz);
+  }
+
+  // 原点付近のチャンク(0,0)にだけ小さな家を1軒配置（デモ用の固定建築）
+  if (cx === 0 && cz === 0) {
+    const hx = 3, hz = 3;
+    const h = terrainHeight(hx, hz);
+    const w = 5, d = 5, height = 4;
+    for (let x = 0; x < w; x++) {
+      for (let z = 0; z < d; z++) {
+        for (let y = 1; y <= height; y++) {
+          const isWall = (x===0||x===w-1||z===0||z===d-1);
+          const isDoor = (x===2 && z===0 && (y===1||y===2));
+          if (isWall && !isDoor) {
+            setBlock(hx+x, h+y, hz+z, BLOCK.BRICK);
+          }
+        }
+        setBlock(hx+x, h, hz+z, BLOCK.PLANK);
+        setBlock(hx+x, h+height+1, hz+z, BLOCK.PLANK);
+      }
+    }
+  }
+}
+
+// 指定したワールド座標を中心に、演算距離内の未生成チャンクをすべて生成する
+function ensureChunksAround(worldX, worldZ, distanceChunks) {
+  const [pcx, pcz] = worldToChunk(worldX, worldZ);
+  for (let dx = -distanceChunks; dx <= distanceChunks; dx++) {
+    for (let dz = -distanceChunks; dz <= distanceChunks; dz++) {
+      generateChunk(pcx + dx, pcz + dz);
+    }
+  }
+}
+
+// ============================================================
+// メッシュ生成（面カリング付き、チャンク単位で管理）
+// 隣接ブロックが不透明なら面を描かない
+// ============================================================
+const chunkMeshGroups = new Map(); // key "cx,cz" -> THREE.Group（シーンに追加済みのメッシュ）
+const chunkGeometry = new THREE.BoxGeometry(1,1,1);
+
+function isOpaque(id) {
+  return id !== BLOCK.AIR && id !== BLOCK.WATER;
+}
+
+// 指定したX,Z座標において、プレイヤー(高さ2ブロック程度)がブロックに埋まらずに
+// スポーン/リスポーンできる安全なY座標を探して返す。
+// 地形の生成が必要な場合は事前にチャンクを生成しておくこと。
+function findSafeSpawnY(x, z) {
+  const requiredHeight = 2; // プレイヤーの当たり判定の高さを余裕を持って2ブロックとみなす
+  const groundH = terrainHeight(x, z);
+
+  // まず地形の表面（groundH+1）が埋まっていないか確認し、
+  // 埋まっている場合は空いている場所が見つかるまで上へ探索する
+  let y = groundH + 1;
+  const maxSearch = 64; // 無限ループ防止の安全装置
+  for (let i = 0; i < maxSearch; i++) {
+    let blocked = false;
+    for (let dy = 0; dy < requiredHeight; dy++) {
+      if (isOpaque(getBlock(x, y + dy, z))) { blocked = true; break; }
+    }
+    if (!blocked) return y;
+    y++;
+  }
+  // 万が一空きが見つからなければ、地形の十分上に強制的に出す
+  return groundH + maxSearch;
+}
+
+// 1チャンク分のメッシュを（再）構築してシーンに追加する
+// buildChunkMeshの本体をジェネレーター関数にし、1回のyieldごとに「1列(dx,dz)ぶんのブロックスキャン」
+// だけを進められるようにする。これにより重いチャンクでも複数フレームに処理を分散でき、
+// 新しいチャンクが読み込まれた瞬間に処理が1フレームへ集中してカクつく問題を避けられる。
+// 通常の即時再構築（初期ロード時・ブロック破壊/設置時）はこのジェネレーターを最後まで回し切ることで
+// これまで通り同期的に完了させる。
+function* buildChunkMeshSteps(cx, cz) {
+  const ckey = chunkKeyOf(cx, cz);
+
+  // 既存のメッシュがあれば破棄
+  const existing = chunkMeshGroups.get(ckey);
+  if (existing) {
+    scene.remove(existing);
+    existing.traverse(obj => {
+      if (obj.geometry && obj.geometry !== chunkGeometry) obj.geometry.dispose();
+    });
+  }
+
+  const group = new THREE.Group();
+  const startX = cx * CHUNK_SIZE;
+  const startZ = cz * CHUNK_SIZE;
+
+  // ブロックタイプ毎に位置配列を集める
+  const groups = {};
+  const waterVoxelPositions = []; // 水面より下、または地形とは無関係な場所にある「内部の水」（キューブのまま）
+  const waterSurfacePositions = []; // 上が空気に接している「水面」（薄い板で描画）
+  for (let dx = 0; dx < CHUNK_SIZE; dx++) {
+    for (let dz = 0; dz < CHUNK_SIZE; dz++) {
+      const x = startX + dx;
+      const z = startZ + dz;
+      // このチャンク内に存在する可能性のあるY範囲を世界のブロックから直接調べる
+      // (world Mapを走査する代わりに、地形高さ付近だけを見れば十分なので範囲を絞る)
+      //
+      // 注意: 木の葉は根本(x,z)から左右2ブロックの範囲まで張り出すため、
+      // 自列(x,z)のterrainHeightだけを基準にyMaxを決めると、
+      // 「隣接列の地形が高く、そこに生えた木の葉がこの列の上空にはみ出しているが、
+      //  この列自身のh+12より高い位置にある」場合にスキャン範囲から漏れてしまい、
+      // ワールドデータ(当たり判定)は存在するのに描画だけされない透明ブロックが発生する。
+      // これを防ぐため、周囲2ブロック分の地形高さの最大値を基準にyMaxを決める。
+      let hNear = terrainHeight(x, z);
+      for (let ndx = -2; ndx <= 2; ndx++) {
+        for (let ndz = -2; ndz <= 2; ndz++) {
+          if (ndx === 0 && ndz === 0) continue;
+          hNear = Math.max(hNear, terrainHeight(x+ndx, z+ndz));
+        }
+      }
+      const h = terrainHeight(x, z);
+      // generateChunk側では地表からfillBottom(h-20)までしかブロックを生成していないため、
+      // それより下まで律儀にスキャンしても常に空気なだけで無駄になる。範囲を合わせて絞る。
+      //
+      // ただし、流水シミュレーションでプレイヤーが横穴を掘って水を通した場合など、
+      // 地形の起伏とは無関係な場所（例えば地表よりかなり下の坑道など）にも水が存在しうる。
+      // それでもyMinはfillBottom基準のままにしておく——generateChunk自体がその深さより
+      // 下にはそもそもブロックを生成しないため、それより下に水が存在することはない。
+      const yMin = Math.max(0, h - 20);
+      const yMax = hNear + 12; // 木の高さ・隣接列からの張り出しを考慮した余裕
+      for (let y = yMin; y <= yMax; y++) {
+        const id = getBlock(x, y, z);
+        if (id === BLOCK.AIR) continue;
+        if (id === BLOCK.WATER) {
+          // 水は陸ブロックとは別に集計する（半透明・専用の面カリングが必要なため）。
+          // 「水面」＝真上が空気に接している水、それ以外は「内部の水」として扱う。
+          const isWaterOrOpaque = (bx,by,bz) => {
+            const b = getBlock(bx,by,bz);
+            return b === BLOCK.WATER || isOpaque(b);
+          };
+          const above = getBlock(x, y+1, z);
+          if (above === BLOCK.AIR) {
+            waterSurfacePositions.push([x,y,z]);
+          } else {
+            const hidden =
+              isWaterOrOpaque(x+1,y,z) && isWaterOrOpaque(x-1,y,z) &&
+              isWaterOrOpaque(x,y+1,z) && isWaterOrOpaque(x,y-1,z) &&
+              isWaterOrOpaque(x,y,z+1) && isWaterOrOpaque(x,y,z-1);
+            if (!hidden) waterVoxelPositions.push([x,y,z]);
+          }
+          continue;
+        }
+        // 面カリング: 完全に囲まれていれば描画しない
+        const hidden =
+          isOpaque(getBlock(x+1,y,z)) && isOpaque(getBlock(x-1,y,z)) &&
+          isOpaque(getBlock(x,y+1,z)) && isOpaque(getBlock(x,y-1,z)) &&
+          isOpaque(getBlock(x,y,z+1)) && isOpaque(getBlock(x,y,z-1));
+        if (hidden) continue;
+        if (!groups[id]) groups[id] = [];
+        groups[id].push([x,y,z]);
+      }
+    }
+    // 1列(dx)ぶんのスキャンが終わるごとに一時停止できるようにする。
+    // これが今回の分割処理の単位で、重いチャンクでも1フレームあたりの負荷を抑えられる。
+    yield;
+  }
+
+  const SHADOW_DISTANCE = 2; // このチャンク距離以内だけ影を落とす（遠くの影はほぼ見えないため計算を省略する）
+  const castsShadow = Math.abs(cx - lastPlayerChunkX) <= SHADOW_DISTANCE && Math.abs(cz - lastPlayerChunkZ) <= SHADOW_DISTANCE;
+
+  for (const idStr in groups) {
+    const id = Number(idStr);
+    const positions = groups[idStr];
+    const mats = getMaterials(id);
+    const mesh = new THREE.InstancedMesh(chunkGeometry, mats, positions.length);
+    // 近くのチャンクだけ影を落とす。遠くのチャンクは影の計算を省略してGPU負荷を下げる
+    mesh.castShadow = castsShadow;
+    mesh.receiveShadow = true;
+    const dummy = new THREE.Object3D();
+    positions.forEach(([x,y,z], i) => {
+      dummy.position.set(x+0.5, y+0.5, z+0.5);
+      dummy.updateMatrix();
+      mesh.setMatrixAt(i, dummy.matrix);
+    });
+    mesh.instanceMatrix.needsUpdate = true;
+    mesh.userData.blockId = id;
+    // インスタンス全体を包むバウンディングスフィアを計算しておくことで、
+    // Three.jsの標準フラスタムカリング（視錐台の外にあるメッシュを描画スキップする処理）が
+    // 個々のインスタンスを走査せず素早く判定できるようにする。
+    // (Three.jsのバージョンによってはInstancedMeshにこのメソッドが無いため存在チェックする)
+    if (typeof mesh.computeBoundingSphere === 'function') {
+      mesh.computeBoundingSphere();
+    }
+    group.add(mesh);
+    // ブロック種類ごとのInstancedMesh生成も、種類数が多いチャンクでは地味に負荷になるため
+    // 1つ作るごとに一時停止できるようにする。
+    yield;
+  }
+
+  // 水（このチャンク内、半透明ひとまとめ）。
+  // waterVoxelPositions / waterSurfacePositions は上の統合スキャンループで既に収集済み
+  // （地形の海だけでなく、流水シミュレーションで生成された流れる水もここに含まれる）。
+  //
+  // 面カリング: 陸ブロックと同様に、6方向すべてが水または不透明ブロックで囲まれている
+  // 水ブロックは描画してもどうせ見えないため除外している。これをしないと、水中に沈んでいる
+  // 水ブロック同士の境界面まで律儀に描画されてしまい、半透明が何重にも重なって
+  // 「ブロックがひとつずつ独立して見える」不自然な縞模様になってしまう。
+  //
+  // 水面（真上が空気の水）については、さらにキューブではなく「薄い板」として描画する。
+  // 立方体のまま並べると、隣同士の水面ブロックの側面(垂直な面)が本来は見えるべきではないのに
+  // 描画され、半透明が重なって縞模様に見えてしまう。板であれば側面がほぼ存在しないため、
+  // 隣接する水面同士がシームレスに1枚の水面として繋がって見える。
+  if (waterVoxelPositions.length || waterSurfacePositions.length) {
+    // 仕様: 透明度50%の水色。Three.jsのopacityは「不透明度」なので、
+    // 透明度50%（半分透ける）を表すには opacity: 0.5 を指定する。
+    const waterMat = new THREE.MeshLambertMaterial({ color: 0x4fa8e0, transparent: true, opacity: 0.5, depthWrite: false, side: THREE.DoubleSide });
+
+    if (waterVoxelPositions.length) {
+      const waterGeo = new THREE.BoxGeometry(1,1,1);
+      const waterMesh = new THREE.InstancedMesh(waterGeo, waterMat, waterVoxelPositions.length);
+      const dummy = new THREE.Object3D();
+      waterVoxelPositions.forEach(([x,y,z], i) => {
+        dummy.scale.set(1,1,1);
+        dummy.position.set(x+0.5, y+0.5, z+0.5);
+        dummy.updateMatrix();
+        waterMesh.setMatrixAt(i, dummy.matrix);
+      });
+      waterMesh.instanceMatrix.needsUpdate = true;
+      waterMesh.renderOrder = 1;
+      group.add(waterMesh);
+    }
+
+    if (waterSurfacePositions.length) {
+      // 水面を「1マスごとに独立した平らな板」ではなく、頂点ごとに高さを補間したカスタム
+      // ジオメトリとして構築する。こうすることで、水位の異なる隣接マス同士の境目が
+      // 階段状の段差ではなく、なだらかな傾斜としてつながって見えるようになる
+      // （本家マインクラフトの水面と同じ考え方: 各マスの四隅の高さを、その頂点を共有する
+      //   周囲のマスの水位の平均値にする）。
+      //
+      // あるワールド座標(x,y,z)の水面が存在すればその高さ(0〜1、ブロック内でのY位置)を返す。
+      // 存在しなければnull。
+      function waterHeightAt(wx, wy, wz) {
+        if (getBlock(wx, wy, wz) !== BLOCK.WATER) return null;
+        if (getBlock(wx, wy+1, wz) !== BLOCK.AIR) return null; // 水面(真上が空気)でなければ対象外
+        const lvl = waterLevel.get(key(wx,wy,wz));
+        return WATER_HEIGHT_BY_LEVEL[lvl === undefined ? 0 : Math.min(lvl, WATER_MAX_SPREAD)];
+      }
+      // 4つのコーナー(dx,dz ∈ {0,1})それぞれについて、そのコーナーに接する4マス
+      // (自分自身を含む2x2)の水面高さの平均を取る。水がないマスは平均の計算に含めない。
+      function cornerHeight(x, y, z, cornerDx, cornerDz) {
+        let sum = 0, count = 0;
+        for (const ddx of [cornerDx-1, cornerDx]) {
+          for (const ddz of [cornerDz-1, cornerDz]) {
+            const h = waterHeightAt(x+ddx, y, z+ddz);
+            if (h !== null) { sum += h; count++; }
+          }
+        }
+        return count > 0 ? sum / count : 0.5; // 念のためのフォールバック（通常は起こらない）
+      }
+
+      const positions = [];
+      const indices = [];
+      waterSurfacePositions.forEach(([x,y,z]) => {
+        // 4隅の高さ（水面のYオフセット）を求める。y00は(x,z)側の角、y11は(x+1,z+1)側の角、というように
+        // ローカルなX,Z方向(0〜1)に対応させる。
+        const y00 = y + cornerHeight(x, y, z, 0, 0);
+        const y10 = y + cornerHeight(x, y, z, 1, 0);
+        const y01 = y + cornerHeight(x, y, z, 0, 1);
+        const y11 = y + cornerHeight(x, y, z, 1, 1);
+        const base = positions.length / 3;
+        // 4頂点（左下、右下、左上、右上の順）
+        positions.push(
+          x,   y00, z,
+          x+1, y10, z,
+          x,   y01, z+1,
+          x+1, y11, z+1
+        );
+        // 2枚の三角形で四角形を構成
+        indices.push(base+0, base+2, base+1, base+1, base+2, base+3);
+      });
+
+      const surfaceGeo = new THREE.BufferGeometry();
+      surfaceGeo.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+      surfaceGeo.setIndex(indices);
+      surfaceGeo.computeVertexNormals();
+      const surfaceMesh = new THREE.Mesh(surfaceGeo, waterMat);
+      surfaceMesh.renderOrder = 1;
+      group.add(surfaceMesh);
+    }
+  }
+
+  scene.add(group);
+  // チャンク単位のフラスタムカリング（視錐台カリング）で使うための中心座標と半径を記録しておく。
+  // チャンクは16x16ブロックの範囲に、地形の高さ+木の分の高さを持つ直方体なので、
+  // それを包む球のバウンディング半径を概算しておく。
+  // 地形はY=63〜70付近、地下はh-20程度、木の葉はh+12程度まであるため、
+  // 実際にブロックが存在しうる範囲はおよそY=43〜82。その中心をチャンク中心の目安に使う。
+  group.userData.chunkCenter = new THREE.Vector3(
+    startX + CHUNK_SIZE/2,
+    62.5,
+    startZ + CHUNK_SIZE/2
+  );
+  group.userData.chunkBoundingRadius = Math.sqrt((CHUNK_SIZE/2)**2 * 2 + 20*20); // 水平方向+高さ方向を包む半径
+  chunkMeshGroups.set(ckey, group);
+}
+
+// 現在少しずつ進めているメッシュ構築のジェネレーター（{ cx, cz, gen }）。
+// buildChunkMesh（同期版）と競合しないよう、ここで先に宣言しておく。
+let activeMeshBuild = null;
+
+// 即時（同期的）にチャンクメッシュを構築する。初期ロードやブロック破壊/設置直後など、
+// 「その場で結果が見えないと困る」場面で使う。
+function buildChunkMesh(cx, cz) {
+  // このチャンクを対象に分割構築が進行中だった場合、そのまま両方走らせると
+  // 完成が後になった方が古いメッシュで上書きし、二重にシーンへ残るなどの不整合が起きる。
+  // 同期版を優先し、進行中のジェネレーターは破棄しておく。
+  if (activeMeshBuild && activeMeshBuild.cx === cx && activeMeshBuild.cz === cz) {
+    activeMeshBuild = null;
+  }
+  const gen = buildChunkMeshSteps(cx, cz);
+  while (!gen.next().done) { /* 最後まで一気に回す */ }
+}
+
+// 指定チャンクのメッシュをシーンから取り除き、メモリを解放する
+function unloadChunkMesh(cx, cz) {
+  const ckey = chunkKeyOf(cx, cz);
+  const group = chunkMeshGroups.get(ckey);
+  if (group) {
+    scene.remove(group);
+    group.traverse(obj => {
+      if (obj.geometry && obj.geometry !== chunkGeometry) obj.geometry.dispose();
+    });
+    chunkMeshGroups.delete(ckey);
+  }
+}
+
+// 指定チャンクのブロックデータそのものをワールドから完全に削除する（演算距離の外側で使用）
+function unloadChunkData(cx, cz) {
+  const ckey = chunkKeyOf(cx, cz);
+  if (!loadedChunks.has(ckey)) return;
+  const startX = cx * CHUNK_SIZE;
+  const startZ = cz * CHUNK_SIZE;
+  // 木の枝が隣接チャンクにはみ出す可能性があるため、少し広めにブロックを削除する
+  const margin = 3;
+  for (let dx = -margin; dx < CHUNK_SIZE + margin; dx++) {
+    for (let dz = -margin; dz < CHUNK_SIZE + margin; dz++) {
+      const x = startX + dx;
+      const z = startZ + dz;
+      const [ocx, ocz] = worldToChunk(x, z);
+      if (ocx !== cx || ocz !== cz) continue; // はみ出た部分は他チャンク側の担当なので触らない
+      const h = terrainHeight(x, z);
+      // generateChunkが実際に生成する範囲(fillBottom=h-20 〜 h+12程度)に合わせて絞る
+      for (let y = Math.max(0, h-20); y <= h+12; y++) {
+        world.delete(key(x,y,z));
+        waterLevel.delete(key(x,y,z));
+      }
+    }
+  }
+  loadedChunks.delete(ckey);
+  // このチャンク範囲を対象にした水の広がり予約が残っていると、後で再訪した際に
+  // 新しく生成された地形と矛盾する古い水を置いてしまう可能性があるため、
+  // 該当範囲のタスクは合わせて破棄しておく。
+  if (waterPendingQueue.length > 0) {
+    waterPendingQueue = waterPendingQueue.filter(t => {
+      const [tcx, tcz] = worldToChunk(t.x, t.z);
+      return !(tcx === cx && tcz === cz);
+    });
+  }
+}
+
+// プレイヤー座標を中心に、演算距離・描画距離に応じてチャンクの生成/破棄/メッシュ更新を行う。
+// 大量のチャンクを1フレームで同期処理するとフレームが止まってカクつくため、
+// 「生成すべきチャンク一覧」をキューに積み、毎フレーム少数ずつ処理する方式にする。
+let lastPlayerChunkX = null, lastPlayerChunkZ = null;
+const chunkGenQueue = []; // 演算対象（地形データ生成）待ちのチャンク座標
+const chunkMeshQueue = []; // 描画対象（メッシュ構築）待ちのチャンク座標
+const queuedSet = new Set(); // 重複キュー登録防止用 "gen:cx,cz" / "mesh:cx,cz"
+
+const CHUNKS_PER_FRAME_GEN = 1;  // 1フレームあたりに生成するチャンク数（地形データ）
+
+function updateChunks(worldX, worldZ, force) {
+  const [pcx, pcz] = worldToChunk(worldX, worldZ);
+  if (!force && pcx === lastPlayerChunkX && pcz === lastPlayerChunkZ) return;
+  lastPlayerChunkX = pcx; lastPlayerChunkZ = pcz;
+
+  // 1. 演算距離内の未生成チャンクをキューに積む（プレイヤーに近い順に処理されるよう距離でソート）
+  const genCandidates = [];
+  for (let dx = -SIM_DISTANCE; dx <= SIM_DISTANCE; dx++) {
+    for (let dz = -SIM_DISTANCE; dz <= SIM_DISTANCE; dz++) {
+      const cx = pcx+dx, cz = pcz+dz;
+      const ckey = chunkKeyOf(cx, cz);
+      if (loadedChunks.has(ckey) || queuedSet.has('gen:'+ckey)) continue;
+      genCandidates.push({ cx, cz, dist: dx*dx + dz*dz });
+    }
+  }
+  genCandidates.sort((a,b) => a.dist - b.dist);
+  for (const c of genCandidates) {
+    chunkGenQueue.push(c);
+    queuedSet.add('gen:'+chunkKeyOf(c.cx, c.cz));
+  }
+
+  // 2. 描画距離内の未構築チャンクメッシュをキューに積む（地形データがあるものだけ、近い順）
+  const meshCandidates = [];
+  for (let dx = -RENDER_DISTANCE; dx <= RENDER_DISTANCE; dx++) {
+    for (let dz = -RENDER_DISTANCE; dz <= RENDER_DISTANCE; dz++) {
+      const cx = pcx+dx, cz = pcz+dz;
+      const ckey = chunkKeyOf(cx, cz);
+      if (chunkMeshGroups.has(ckey) || queuedSet.has('mesh:'+ckey)) continue;
+      meshCandidates.push({ cx, cz, dist: dx*dx + dz*dz });
+    }
+  }
+  meshCandidates.sort((a,b) => a.dist - b.dist);
+  for (const c of meshCandidates) {
+    chunkMeshQueue.push(c);
+    queuedSet.add('mesh:'+chunkKeyOf(c.cx, c.cz));
+  }
+
+  // 3. 描画距離の外側にあるメッシュを破棄（メモリ・GPU負荷軽減。これは軽い処理なので即座に行う）
+  for (const ckey of Array.from(chunkMeshGroups.keys())) {
+    const [ccx, ccz] = ckey.split(',').map(Number);
+    if (Math.abs(ccx - pcx) > RENDER_DISTANCE || Math.abs(ccz - pcz) > RENDER_DISTANCE) {
+      unloadChunkMesh(ccx, ccz);
+    }
+  }
+
+  // 4. 演算距離の外側にあるチャンクデータを破棄（メモリ負荷軽減。無限ワールドを維持するために必須）
+  for (const ckey of Array.from(loadedChunks.keys())) {
+    const [ccx, ccz] = ckey.split(',').map(Number);
+    if (Math.abs(ccx - pcx) > SIM_DISTANCE || Math.abs(ccz - pcz) > SIM_DISTANCE) {
+      unloadChunkData(ccx, ccz);
+    }
+  }
+
+  // 5. キューから外れた（プレイヤーから離れすぎた）予約はキャンセルする
+  for (let i = chunkGenQueue.length - 1; i >= 0; i--) {
+    const c = chunkGenQueue[i];
+    if (Math.abs(c.cx - pcx) > SIM_DISTANCE || Math.abs(c.cz - pcz) > SIM_DISTANCE) {
+      queuedSet.delete('gen:'+chunkKeyOf(c.cx, c.cz));
+      chunkGenQueue.splice(i, 1);
+    }
+  }
+  for (let i = chunkMeshQueue.length - 1; i >= 0; i--) {
+    const c = chunkMeshQueue[i];
+    if (Math.abs(c.cx - pcx) > RENDER_DISTANCE || Math.abs(c.cz - pcz) > RENDER_DISTANCE) {
+      queuedSet.delete('mesh:'+chunkKeyOf(c.cx, c.cz));
+      chunkMeshQueue.splice(i, 1);
+    }
+  }
+}
+
+// 毎フレーム呼び出し、キューにあるチャンクを少数ずつ処理する（フレームレートを落とさないため）
+// メッシュ構築は特に重いため、1チャンク分を丸ごと1フレームで処理するのではなく、
+// ジェネレーターで内部を「列単位」まで分割し、1フレームあたりの処理ステップ数に上限を設けて
+// 複数フレームにまたがって少しずつ進める。これにより新しいチャンクが視界に入った瞬間の
+// カクつき・一瞬の停止を抑える。
+const MESH_BUILD_STEPS_PER_FRAME = 4; // 1フレームで進めるジェネレーターのステップ数（yieldの回数）
+
+function processChunkQueues() {
+  for (let i = 0; i < CHUNKS_PER_FRAME_GEN && chunkGenQueue.length > 0; i++) {
+    const c = chunkGenQueue.shift();
+    queuedSet.delete('gen:'+chunkKeyOf(c.cx, c.cz));
+    generateChunk(c.cx, c.cz);
+  }
+
+  let stepsLeft = MESH_BUILD_STEPS_PER_FRAME;
+  while (stepsLeft > 0) {
+    if (!activeMeshBuild) {
+      if (chunkMeshQueue.length === 0) break;
+      const c = chunkMeshQueue.shift();
+      const ckey = chunkKeyOf(c.cx, c.cz);
+      queuedSet.delete('mesh:'+ckey);
+      if (!loadedChunks.has(ckey)) {
+        // 地形データがまだ無い場合はメッシュ構築を後回しにする。
+        // updateChunks()はプレイヤーがチャンク境界を跨いだ時にしか再実行されないため、
+        // ここで単に破棄すると同じチャンク内に留まり続ける限り二度とキューされず、
+        // 「チャンクの描画が永久に抜け落ちる」バグになる。そのためキューの末尾に積み直す。
+        chunkMeshQueue.push(c);
+        queuedSet.add('mesh:'+ckey);
+        break;
+      }
+      activeMeshBuild = { cx: c.cx, cz: c.cz, gen: buildChunkMeshSteps(c.cx, c.cz) };
+    }
+    const { cx, cz } = activeMeshBuild;
+    const { done } = activeMeshBuild.gen.next();
+    stepsLeft--;
+    if (done) {
+      activeMeshBuild = null;
+      // 構築が完了した時点で、既にプレイヤーから離れすぎて描画距離の外側になっていた場合は
+      // （移動が速く、待機中にキューから外れたチャンクなど）そのまま残すと無駄なメッシュが
+      // シーンに残るため、ここで即座に片付けておく。
+      if (Math.abs(cx - lastPlayerChunkX) > RENDER_DISTANCE || Math.abs(cz - lastPlayerChunkZ) > RENDER_DISTANCE) {
+        unloadChunkMesh(cx, cz);
+      }
+    }
+  }
+}
+
+// 起動時・シード変更時など、ローディング画面を挟んで良いタイミングでのみ使う同期ロード関数。
+// 通常のプレイ中の移動では絶対に使わない（フレームが止まってしまうため）。
+function loadChunksSync(worldX, worldZ) {
+  const [pcx, pcz] = worldToChunk(worldX, worldZ);
+  lastPlayerChunkX = pcx; lastPlayerChunkZ = pcz;
+  chunkGenQueue.length = 0;
+  chunkMeshQueue.length = 0;
+  queuedSet.clear();
+
+  for (let dx = -SIM_DISTANCE; dx <= SIM_DISTANCE; dx++) {
+    for (let dz = -SIM_DISTANCE; dz <= SIM_DISTANCE; dz++) {
+      generateChunk(pcx + dx, pcz + dz);
+    }
+  }
+  for (let dx = -RENDER_DISTANCE; dx <= RENDER_DISTANCE; dx++) {
+    for (let dz = -RENDER_DISTANCE; dz <= RENDER_DISTANCE; dz++) {
+      const ckey = chunkKeyOf(pcx+dx, pcz+dz);
+      if (!chunkMeshGroups.has(ckey)) {
+        buildChunkMesh(pcx+dx, pcz+dz);
+      }
+    }
+  }
+}
+
+// ブロックの破壊/設置などでワールドデータが変わったとき、影響を受けるチャンクのメッシュだけ再構築する
+function rebuildAffectedChunks(x, y, z) {
+  rebuildAffectedChunksMulti([[x,y,z]]);
+}
+
+// 複数座標をまとめて受け取り、影響を受けるチャンク集合を1回だけ再構築する版。
+// 水の流動シミュレーションでは一度に多数のブロックが変化するため、座標ごとに
+// 毎回buildChunkMeshを呼ぶと同じチャンクを何度も再構築してしまい非常に無駄になる。
+function rebuildAffectedChunksMulti(coords) {
+  const toRebuild = new Set();
+  for (const [x,,z] of coords) {
+    const [ccx, ccz] = worldToChunk(x, z);
+    toRebuild.add(chunkKeyOf(ccx, ccz));
+    // チャンク境界のブロックが変わった場合、隣接チャンクの面カリングにも影響するため一緒に再構築する
+    const localX = ((x % CHUNK_SIZE) + CHUNK_SIZE) % CHUNK_SIZE;
+    const localZ = ((z % CHUNK_SIZE) + CHUNK_SIZE) % CHUNK_SIZE;
+    if (localX === 0) toRebuild.add(chunkKeyOf(ccx-1, ccz));
+    if (localX === CHUNK_SIZE-1) toRebuild.add(chunkKeyOf(ccx+1, ccz));
+    if (localZ === 0) toRebuild.add(chunkKeyOf(ccx, ccz-1));
+    if (localZ === CHUNK_SIZE-1) toRebuild.add(chunkKeyOf(ccx, ccz+1));
+  }
+  for (const ckey of toRebuild) {
+    if (chunkMeshGroups.has(ckey)) {
+      const [rcx, rcz] = ckey.split(',').map(Number);
+      buildChunkMesh(rcx, rcz);
+    }
+  }
+}
+
+// ============================================================
+// 水の流動シミュレーション
+// ============================================================
+// 仕様(Wikiの「広がり」節に基づく):
+//   ・水はブロックで止められるか、奈落に落ちるまで無限に下に広がる
+//   ・平らな面では水源ブロックから水平方向に最大7ブロック流れる
+//   ・各方向の重みは、流れ込めるすべての隣接ブロックについて、
+//     流入先のブロックから4ブロック以下で到達可能な経路を探して決める…という
+//     本家の詳細な重み計算は非常に複雑なため、ここでは実用上ほぼ同じ見た目になる
+//     単純化版として「BFSで水源からの最短距離(最大7)を重みとする」方式を採用する。
+//   ・広がる速度は1ブロック/5ティック=4ブロック/秒（Wiki記載の値をそのまま採用）。
+//     一度に全部反映するのではなく、時間経過に応じて少しずつ隣へ広がっていくようにする。
+const WATER_SIM_QUEUE_LIMIT = 20000; // 保留中も含めた同時進行タスク数の上限（暴走防止）
+const WATER_SPREAD_SECONDS_PER_BLOCK = 1 / 4; // 1ブロック広がるのにかかる時間（秒）＝秒速4ブロック
+
+// 「次にこの座標へ広がる／落下する」処理を、実行予定時刻とともに保持する待機キュー。
+// 要素: { x, y, z, level, dueTime } dueTimeはperformance.now()基準のミリ秒。
+let waterPendingQueue = [];
+
+// (x,y,z,level)を起点として、水平方向・下方向への広がりを待機キューに登録する。
+// 実際にブロックを置くのはprocessWaterQueue側（時間が来たときに1マスずつ）で行う。
+function scheduleWaterSpread(x, y, z, level, delaySeconds = 0) {
+  if (waterPendingQueue.length >= WATER_SIM_QUEUE_LIMIT) return; // 暴走防止
+  waterPendingQueue.push({ x, y, z, level, dueTime: performance.now() + delaySeconds * 1000 });
+}
+
+// ------ 「下り優先」の重み判定 ------
+// 仕様(Wikiの「広がり」節、水平に広がるときの重みの決め方):
+//   ・水平に広がる各方向に、まず重み999が割り当てられる
+//   ・流れ込めるすべての隣接ブロックについて、流入先のブロックから
+//     4ブロック以下で到達可能な「下り(そこから下に落ちられる場所)」を探す
+//   ・見つかれば、その方向の重みは、そこまでの最短経路距離に設定される
+//   ・水は「最も重みが少ない方向」＝最も近くに下りが見つかった方向に優先的に広がる
+const WATER_DOWNHILL_SEARCH_LIMIT = 4; // 「4ブロック以下で到達可能な経路」の探索上限
+
+// (startX,y,startZ)を起点に、そこから最大4ブロック以内に「下に落ちられる場所
+// （真下が空気）」があるかをBFSで探し、見つかった場合はそこまでの距離(0〜4)を返す。
+// 見つからなければ999を返す（＝下り優先ではない扱い）。
+function findDownhillWeight(startX, y, startZ) {
+  // 開始地点自体が既に下りなら距離0
+  if (getBlock(startX, y-1, startZ) === BLOCK.AIR) return 0;
+
+  const visited = new Set([startX+','+startZ]);
+  let frontier = [[startX, startZ]];
+  for (let dist = 1; dist <= WATER_DOWNHILL_SEARCH_LIMIT; dist++) {
+    const next = [];
+    for (const [fx, fz] of frontier) {
+      const dirs = [[1,0],[-1,0],[0,1],[0,-1]];
+      for (const [ddx, ddz] of dirs) {
+        const nx = fx+ddx, nz = fz+ddz;
+        const k = nx+','+nz;
+        if (visited.has(k)) continue;
+        visited.add(k);
+        // その水平位置に水が流れ込めるか（空気または既存の水であること）を確認
+        const nb = getBlock(nx, y, nz);
+        if (nb !== BLOCK.AIR && nb !== BLOCK.WATER) continue;
+        if (getBlock(nx, y-1, nz) === BLOCK.AIR) return dist; // ここから下に落ちられる
+        next.push([nx, nz]);
+      }
+    }
+    frontier = next;
+    if (frontier.length === 0) break;
+  }
+  return 999; // 4ブロック以内に下りが見つからなかった
+}
+
+
+// 指定した座標(水源または既存の水)を起点に、広がりの一歩目を即座に予約する。
+// 戻り値はなし（実際のブロック変化はprocessWaterQueueで時間差にて発生する）。
+function simulateWaterFrom(startCoords) {
+  for (const [x, y, z, level] of startCoords) {
+    scheduleWaterSpread(x, y, z, level, 0);
+  }
+}
+
+// ------ 無限水源の生成 ------
+// 仕様(Wikiの「水源ブロック」節に基づく):
+//   隣接した複数の水源ブロックから水流が流れ込み、かつ底が別の水源ブロックか
+//   固体ブロックである場所に、新しい水源ブロックが生み出される
+//   （2x2、3x1、L字型などの水たまりが「無限水源」になる）。
+//
+// 実装: あるマス(x,y,z)が「流れる水」(level>0)であり、東西南北のうち2方向以上が
+// 水源(level=0)に隣接していて、かつ真下が固体または水源であれば、そのマス自体を
+// 水源(level=0)に昇格させる。昇格すると、そこからさらに新しい水源として水平方向に
+// 広がっていくため、無限水源同士が連結して大きな水源の池を形成できるようになる。
+function tryUpgradeToInfiniteSource(x, y, z) {
+  if (getBlock(x, y, z) !== BLOCK.WATER) return false;
+  const level = waterLevel.get(key(x,y,z));
+  if (level === undefined || level === 0) return false; // 既に水源なら対象外
+
+  const below = getBlock(x, y-1, z);
+  const belowOk = isOpaque(below) || (below === BLOCK.WATER && waterLevel.get(key(x,y-1,z)) === 0);
+  if (!belowOk) return false; // 底が固体でも水源でもない場合は無限水源にならない（本家仕様）
+
+  const neighbors = [[x+1,y,z], [x-1,y,z], [x,y,z+1], [x,y,z-1]];
+  let sourceCount = 0;
+  for (const [nx, ny, nz] of neighbors) {
+    if (getBlock(nx, ny, nz) === BLOCK.WATER && waterLevel.get(key(nx,ny,nz)) === 0) {
+      sourceCount++;
+    }
+  }
+  if (sourceCount < 2) return false; // 2方向以上から水源が流れ込んでいる必要がある
+
+  waterLevel.set(key(x,y,z), 0);
+  // 新しく生まれた水源からも、無限水源同士がさらに広がって連結できるよう改めて広がりを予約する
+  scheduleWaterSpread(x, y, z, 0, WATER_SPREAD_SECONDS_PER_BLOCK);
+  return true;
+}
+
+// 毎フレーム呼び出す。待機中のタスクのうち、予定時刻に達したものだけを処理して
+// 実際に水ブロックを設置し、そこからさらに1マス先への広がりを新たに予約する。
+// これにより「秒速4ブロック」の速度で徐々に水が広がっていく見た目になる。
+function processWaterQueue() {
+  if (waterPendingQueue.length === 0) return;
+  const now = performance.now();
+  const remaining = [];
+  const touchedChunks = new Set();
+  for (const task of waterPendingQueue) {
+    if (task.dueTime > now) { remaining.push(task); continue; }
+    const { x, y, z, level } = task;
+
+    // まず真下を確認: 空気なら重力に従って水が落ちる（下方向は距離制限なしで無限に広がる）
+    const below = getBlock(x, y-1, z);
+    if (below === BLOCK.AIR) {
+      setBlock(x, y-1, z, BLOCK.WATER);
+      waterLevel.set(key(x,y-1,z), 0); // 落下した水は新しい水源相当（本家と同様、下方向では重みが減衰しない）
+      touchedChunks.add(chunkKeyOf(...worldToChunk(x, z)));
+      scheduleWaterSpread(x, y-1, z, 0, WATER_SPREAD_SECONDS_PER_BLOCK);
+      continue; // 下に流れ落ちる場合、その位置からの水平方向への広がりは同時には起こらない
+    }
+    if (below === BLOCK.WATER) {
+      continue; // 既に水がある場合はそこで打ち止め（無限落下ループ防止）
+    }
+
+    // 真下が塞がっている場合、水平方向に広がる（水源からの重みが7を超えたら広がらない）
+    if (level >= WATER_MAX_SPREAD) continue;
+    const neighbors = [[x+1,y,z], [x-1,y,z], [x,y,z+1], [x,y,z-1]];
+
+    // 仕様: まず各方向に流れ込めるか(空気または既存の水)を確認する。流れ込める方向について、
+    // 「4ブロック以内に下りがあるか」を調べ、最も重みが小さい(=最も近くに下りがある)方向を
+    // 優先的に選ぶ。どの方向にも4ブロック以内の下りがなければ、これまで通り全方向に広がる。
+    const flowable = [];
+    for (const [nx, ny, nz] of neighbors) {
+      const nb = getBlock(nx, ny, nz);
+      if (nb === BLOCK.WATER) {
+        // 既に水がある方向は新規設置の対象にはならないが、無限水源化のチェックは行う
+        if (tryUpgradeToInfiniteSource(nx, ny, nz)) {
+          touchedChunks.add(chunkKeyOf(...worldToChunk(nx, nz)));
+        }
+        continue;
+      }
+      if (nb !== BLOCK.AIR) continue; // 水以外の何かで塞がれていれば流れない
+      const weight = findDownhillWeight(nx, y, nz);
+      flowable.push({ nx, ny, nz, weight });
+    }
+    if (flowable.length === 0) continue;
+    const minWeight = Math.min(...flowable.map(f => f.weight));
+    // 「最も重みが小さい方向」だけに広がる。ただし全方向とも下りが見つからない(重み999)場合は
+    // 本家でも平らな地面と同じ扱いになり、結局は全方向へ均等に広がる。
+    const targets = flowable.filter(f => f.weight === minWeight);
+
+    for (const { nx, ny, nz } of targets) {
+      const nextLevel = level + 1;
+      setBlock(nx, ny, nz, BLOCK.WATER);
+      waterLevel.set(key(nx,ny,nz), nextLevel);
+      touchedChunks.add(chunkKeyOf(...worldToChunk(nx, nz)));
+      scheduleWaterSpread(nx, ny, nz, nextLevel, WATER_SPREAD_SECONDS_PER_BLOCK);
+
+      // 無限水源の生成チェック: 新しく水を置いたことで、このマス自身、または
+      // このマスに隣接する既存の「流れる水」が「2方向以上から水源が流れ込む」条件を
+      // 新たに満たすようになった可能性があるため、まとめて再チェックする。
+      const upgradeCandidates = [[nx,ny,nz], [nx+1,ny,nz], [nx-1,ny,nz], [nx,ny,nz+1], [nx,ny,nz-1]];
+      for (const [ux, uy, uz] of upgradeCandidates) {
+        if (tryUpgradeToInfiniteSource(ux, uy, uz)) {
+          touchedChunks.add(chunkKeyOf(...worldToChunk(ux, uz)));
+        }
+      }
+    }
+  }
+  waterPendingQueue = remaining;
+  for (const ckey of touchedChunks) {
+    if (chunkMeshGroups.has(ckey)) {
+      const [rcx, rcz] = ckey.split(',').map(Number);
+      buildChunkMesh(rcx, rcz);
+    }
+  }
+}
+
+// ブロックが壊されて空気になった位置の周囲（上下左右前後）に既存の水があれば、
+// そこを起点として水を広げる。仕様通り「ブロックで止められている水」が
+// 堰を切って流れ出す挙動を再現する。
+// 広がりは即座には反映されず、processWaterQueue()によって時間経過とともに(秒速4ブロックで)進む。
+function triggerWaterSpreadAround(x, y, z) {
+  const dirs = [[1,0,0],[-1,0,0],[0,1,0],[0,-1,0],[0,0,1],[0,0,-1]];
+  for (const [dx,dy,dz] of dirs) {
+    const nx=x+dx, ny=y+dy, nz=z+dz;
+    if (getBlock(nx,ny,nz) !== BLOCK.WATER) continue;
+    const lvl = waterLevel.get(key(nx,ny,nz));
+    scheduleWaterSpread(nx, ny, nz, lvl === undefined ? 0 : lvl, 0);
+  }
+}
+
+// 視点が向いているブロックを示すアウトライン（ワイヤーフレーム）
+const outlineGeometry = new THREE.EdgesGeometry(new THREE.BoxGeometry(1.002, 1.002, 1.002));
+const outlineMaterial = new THREE.LineBasicMaterial({ color: 0x000000, linewidth: 2 });
+const blockOutline = new THREE.LineSegments(outlineGeometry, outlineMaterial);
+blockOutline.visible = false;
+blockOutline.renderOrder = 999;
+scene.add(blockOutline);
+
+// レイキャスト用: instancedMeshからブロック座標を逆算するため、個別Meshのraycastは重いので
+// 独自の格子DDAレイキャストを実装する（高速・正確）
+function raycastVoxel(origin, dir, maxDist) {
+  let x = Math.floor(origin.x), y = Math.floor(origin.y), z = Math.floor(origin.z);
+  const stepX = dir.x > 0 ? 1 : -1;
+  const stepY = dir.y > 0 ? 1 : -1;
+  const stepZ = dir.z > 0 ? 1 : -1;
+
+  function tDelta(d) { return d === 0 ? Infinity : Math.abs(1/d); }
+  const tDeltaX = tDelta(dir.x), tDeltaY = tDelta(dir.y), tDeltaZ = tDelta(dir.z);
+
+  function firstT(o, d, step) {
+    if (d === 0) return Infinity;
+    // oがちょうど整数（セルの境界）の場合、Math.ceil(o)-1 === o となってt=0になり、
+    // まだ進んでいないのに次のセルへ進んだと誤判定する恐れがあるため、
+    // 常に「現在のセルの先の境界」までの距離になるよう floor(o)+1 / ceil(o)-1 の代わりに
+    // 現在のセル基準で一段階先の境界を使う。
+    const cell = Math.floor(o);
+    const boundary = step > 0 ? cell + 1 : cell;
+    return Math.abs((boundary - o) / d);
+  }
+  let tMaxX = firstT(origin.x, dir.x, stepX);
+  let tMaxY = firstT(origin.y, dir.y, stepY);
+  let tMaxZ = firstT(origin.z, dir.z, stepZ);
+
+  let dist = 0;
+  let lastNormal = new THREE.Vector3();
+  while (dist < maxDist) {
+    const b = getBlock(x,y,z);
+    if (isOpaque(b)) {
+      return { x, y, z, normal: lastNormal.clone() };
+    }
+    if (tMaxX < tMaxY && tMaxX < tMaxZ) {
+      x += stepX; dist = tMaxX; tMaxX += tDeltaX;
+      lastNormal.set(-stepX, 0, 0);
+    } else if (tMaxY < tMaxZ) {
+      y += stepY; dist = tMaxY; tMaxY += tDeltaY;
+      lastNormal.set(0, -stepY, 0);
+    } else {
+      z += stepZ; dist = tMaxZ; tMaxZ += tDeltaZ;
+      lastNormal.set(0, 0, -stepZ);
+    }
+  }
+  return null;
+}
+
+// ============================================================
+// プレイヤー / 移動 / 物理
+// ============================================================
+
+// 起動時、初期位置周辺のチャンクを演算距離・描画距離ぶん生成しておく（ローディング画面裏なので同期でOK）
+loadChunksSync(3, -6);
+
+const player = {
+  pos: new THREE.Vector3(3, findSafeSpawnY(3, -6), -6),
+  vel: new THREE.Vector3(0,0,0),
+  yaw: Math.PI,
+  pitch: -0.1,
+  onGround: false,
+  height: 1.7,
+  radius: 0.28,
+  eyeOffset: 1.6,
+};
+camera.position.copy(player.pos).setY(player.pos.y + player.eyeOffset);
+
+const keys = {};
+let isSprinting = false;
+let lastWPressTime = -Infinity;
+const DOUBLE_TAP_WINDOW = 300; // ms
+
+window.addEventListener('keydown', e => {
+  if (!keys[e.code]) {
+    // キーが押された瞬間(リピートではない)のみ処理
+    if (e.code === 'KeyW') {
+      const now = performance.now();
+      if (now - lastWPressTime < DOUBLE_TAP_WINDOW) {
+        isSprinting = true;
+      }
+      lastWPressTime = now;
+    }
+  }
+  keys[e.code] = true;
+  const num = parseInt(e.key);
+  if (num >= 1 && num <= 9) selectSlot(num-1);
+});
+window.addEventListener('keyup', e => {
+  keys[e.code] = false;
+  if (e.code === 'KeyW') {
+    isSprinting = false;
+  }
+});
+
+// マウスルック（Pointer Lock）
+const canvasEl = renderer.domElement;
+let locked = false;
+document.getElementById('start-btn').addEventListener('click', () => {
+  const seedInput = document.getElementById('seed-input').value.trim();
+  const seedValue = seedInput === '' ? (Date.now() + '-' + Math.random()) : seedInput;
+
+  applySeed(seedValue);
+
+  // 既存のワールドデータ・チャンク管理状態・メッシュを全て破棄してクリーンな状態に戻す
+  world.clear();
+  loadedChunks.clear();
+  for (const ckey of Array.from(chunkMeshGroups.keys())) {
+    const [ccx, ccz] = ckey.split(',').map(Number);
+    unloadChunkMesh(ccx, ccz);
+  }
+  lastPlayerChunkX = null; lastPlayerChunkZ = null;
+
+  // 新しいシードでプレイヤー初期位置周辺のチャンクを生成（スタート画面裏なので同期でOK）
+  loadChunksSync(3, -6);
+
+  // プレイヤー位置を新しい地形に合わせて再設定（ブロックに埋まらない安全な高さを探す）
+  player.pos.set(3, findSafeSpawnY(3, -6), -6);
+  player.vel.set(0,0,0);
+  player.onGround = false;
+  camera.position.copy(player.pos).setY(player.pos.y + player.eyeOffset);
+
+  document.getElementById('seed-display-value').textContent = seedInput === '' ? worldSeed : seedInput;
+
+  document.getElementById('start-screen').style.display = 'none';
+  canvasEl.requestPointerLock();
+});
+document.getElementById('random-seed-btn').addEventListener('click', () => {
+  document.getElementById('seed-input').value = Math.floor(Math.random() * 1e9);
+});
+canvasEl.addEventListener('click', () => {
+  if (!locked) canvasEl.requestPointerLock();
+});
+document.addEventListener('pointerlockchange', () => {
+  locked = document.pointerLockElement === canvasEl;
+});
+
+// タブを閉じる・切り替える・非表示にする際にポインターロックを解除し、
+// カーソルが消えたままにならないようにする
+function releasePointerLock() {
+  if (document.pointerLockElement === canvasEl) {
+    document.exitPointerLock();
+  }
+}
+window.addEventListener('beforeunload', releasePointerLock);
+window.addEventListener('pagehide', releasePointerLock);
+window.addEventListener('blur', releasePointerLock);
+document.addEventListener('visibilitychange', () => {
+  if (document.hidden) releasePointerLock();
+});
+
+document.addEventListener('mousemove', e => {
+  if (!locked) return;
+  const sensitivity = 0.0022;
+  player.yaw -= e.movementX * sensitivity;
+  player.pitch -= e.movementY * sensitivity;
+  player.pitch = Math.max(-Math.PI/2+0.05, Math.min(Math.PI/2-0.05, player.pitch));
+});
+
+// ============================================================
+// ホットバー / ブロック選択
+// ============================================================
+const hotbarBlocks = [BLOCK.AIR, BLOCK.GRASS, BLOCK.DIRT, BLOCK.STONE, BLOCK.SAND, BLOCK.WOOD, BLOCK.LEAVES, BLOCK.PLANK, BLOCK.BRICK, BLOCK.COBBLESTONE, BLOCK.WATER];
+const blockNames = {
+  [BLOCK.AIR]: '(なし)', [BLOCK.GRASS]: '草', [BLOCK.DIRT]: '土', [BLOCK.STONE]: '石', [BLOCK.SAND]: '砂',
+  [BLOCK.WOOD]: '木', [BLOCK.LEAVES]: '葉', [BLOCK.PLANK]: '板材', [BLOCK.BRICK]: 'レンガ',
+  [BLOCK.COBBLESTONE]: '丸石', [BLOCK.WATER]: '水（水源）'
+};
+let selectedSlot = 0;
+const hotbarEl = document.getElementById('hotbar');
+hotbarBlocks.forEach((b, i) => {
+  const slot = document.createElement('div');
+  slot.className = 'slot' + (i===0 ? ' active' : '');
+  if (b === BLOCK.AIR) {
+    // 「空欄」スロット: 何も持たない状態にして、一人称の腕モデルを確認しやすくするための枠
+    slot.innerHTML = `<span class="key">${i+1}</span><div class="swatch" style="background:transparent;border:1px dashed rgba(255,255,255,0.5)"></div>`;
+  } else if (b === BLOCK.WATER) {
+    // 水は半透明ブロックなので、スワッチも実際の見た目に近い半透明感で表示する
+    const col = BLOCK_COLORS[b].all;
+    slot.innerHTML = `<span class="key">${i+1}</span><div class="swatch" style="background:#${col.toString(16).padStart(6,'0')}; opacity:0.6"></div>`;
+  } else {
+    const col = BLOCK_COLORS[b].top || BLOCK_COLORS[b].all;
+    slot.innerHTML = `<span class="key">${i+1}</span><div class="swatch" style="background:#${col.toString(16).padStart(6,'0')}"></div>`;
+  }
+  slot.title = blockNames[b];
+  slot.addEventListener('click', () => selectSlot(i));
+  hotbarEl.appendChild(slot);
+});
+const itemNameEl = document.getElementById('item-name-display');
+let itemNameFadeTimeout = null;
+
+function showItemName(text) {
+  // アニメーションを確実に再スタートさせるため、一度クラスを外してリフローを挟む
+  itemNameEl.classList.remove('show');
+  itemNameEl.textContent = text;
+  // 強制リフロー
+  void itemNameEl.offsetWidth;
+  itemNameEl.classList.add('show');
+
+  if (itemNameFadeTimeout) clearTimeout(itemNameFadeTimeout);
+  itemNameFadeTimeout = setTimeout(() => {
+    itemNameEl.classList.remove('show');
+  }, 2000);
+}
+
+function selectSlot(i) {
+  const changed = selectedSlot !== i;
+  selectedSlot = i;
+  document.querySelectorAll('.slot').forEach((s,idx) => s.classList.toggle('active', idx===i));
+  if (changed) {
+    showItemName(blockNames[hotbarBlocks[i]]);
+    updateHeldItemMesh();
+  }
+}
+window.addEventListener('wheel', e => {
+  if (!locked) return;
+  const count = hotbarBlocks.length;
+  let next = selectedSlot + (e.deltaY > 0 ? 1 : -1);
+  next = ((next % count) + count) % count;
+  selectSlot(next);
+});
+
+// ============================================================
+// 一人称視点の右腕（本家マインクラフト風）
+// ============================================================
+// カメラの子として追加することで、視点操作にそのまま追従する「一人称の腕」を作る。
+// 腕本体（肌色の直方体）と、持っているブロックのミニキューブを別オブジェクトにして、
+// アイテムを持っている間は腕を隠してブロック側だけを見せる（本家の見た目に近い挙動）。
+const armGroup = new THREE.Group();
+// 画面右下から生えるように配置。原点(肩の位置)をここに置き、腕はそこから下に伸びる形にする。
+armGroup.position.set(0.78, -0.7, -0.85);
+armGroup.rotation.set(0.15, -0.3, 0.5);
+camera.add(armGroup);
+scene.add(camera); // camera自体をシーンに入れないと子(armGroup)が描画されないため
+
+const SKIN_COLOR = 0xdba36b;
+const armMat = new THREE.MeshLambertMaterial({ color: SKIN_COLOR, depthTest: false });
+const armGeo = new THREE.BoxGeometry(0.32, 0.32, 0.9);
+const armMesh = new THREE.Mesh(armGeo, armMat);
+armMesh.position.set(0, 0, -0.35); // グループ原点(肩)から前方(カメラ方向)に伸ばす
+armMesh.renderOrder = 998; // 地形やブロックに食い込まず必ず手前に見えるようにする
+armGroup.add(armMesh);
+
+// 持っているブロックのミニキューブ（画面右下寄りに独立して配置。armGroupではなくcamera直下に
+// 置くことで、腕本体とは別に「もっと右下に寄せる」といった位置調整がしやすいようにしている）
+const heldItemGroup = new THREE.Group();
+heldItemGroup.position.set(0.75, -0.72, -0.85);
+heldItemGroup.rotation.set(0.4, 0.8, 0.2);
+camera.add(heldItemGroup);
+let heldItemMesh = null;
+
+function updateHeldItemMesh() {
+  if (heldItemMesh) {
+    heldItemGroup.remove(heldItemMesh);
+    heldItemMesh.geometry.dispose();
+    if (Array.isArray(heldItemMesh.material)) heldItemMesh.material.forEach(m => m.dispose());
+    else heldItemMesh.material.dispose();
+    heldItemMesh = null;
+  }
+  const blockId = hotbarBlocks[selectedSlot];
+  if (blockId === BLOCK.AIR) {
+    // 空欄スロット: 何も持たないので腕本体をそのまま見せる（腕の確認用）
+    heldItemGroup.visible = false;
+    armMesh.visible = true;
+    return;
+  }
+  const mats = getMaterials(blockId).map(m => {
+    const clone = m.clone();
+    clone.depthTest = false; // 地形に食い込まず常に手前に表示されるようにする
+    return clone;
+  });
+  const geo = new THREE.BoxGeometry(0.42, 0.42, 0.42);
+  heldItemMesh = new THREE.Mesh(geo, mats);
+  heldItemMesh.renderOrder = 998;
+  heldItemGroup.add(heldItemMesh);
+  heldItemGroup.visible = true;
+  // アイテム（ブロック）を持っている間は、本家同様に手そのものの直方体は見せず
+  // ブロックだけを表示する
+  armMesh.visible = false;
+}
+updateHeldItemMesh();
+
+// ------ 腕を振るアニメーション（ブロックを壊す/置くとき、反時計回りに振る） ------
+let armSwingProgress = 1; // 0=振り始め ... 1=静止状態（1で正常なポーズに戻る）
+const ARM_SWING_DURATION = 0.28; // 秒
+
+function triggerArmSwing() {
+  armSwingProgress = 0;
+}
+
+function updateArmSwing(dt) {
+  if (armSwingProgress < 1) {
+    armSwingProgress = Math.min(1, armSwingProgress + dt / ARM_SWING_DURATION);
+  }
+  // 0→1→0で山型になるイージング（振り始めに勢いよく、戻りは緩やかに）
+  const t = armSwingProgress;
+  const swing = Math.sin(t * Math.PI) * (1 - t * 0.15);
+  // 反時計回り（画面手前から見て）に振るため、腕グループのZ回転(ロール)を
+  // 基準値より増加させる方向に動かす（Three.jsのZ軸正回転は画面奥から見て反時計回り）
+  armGroup.rotation.z = 0.5 + swing * 1.1;
+  armGroup.rotation.x = 0.15 - swing * 0.55;
+  armGroup.rotation.y = -0.3 - swing * 0.35;
+  // 振っている間は少し腕を手前に引き寄せて奥行きの動きも出す
+  armGroup.position.z = -0.85 + swing * 0.15;
+
+  // アイテムを持っている場合はheldItemGroup（camera直下、独立配置）も同じ勢いで振る
+  if (heldItemGroup.visible) {
+    heldItemGroup.rotation.set(0.4 - swing * 0.55, 0.8 - swing * 0.35, 0.2 + swing * 1.1);
+    heldItemGroup.position.z = -0.85 + swing * 0.15;
+  }
+}
+
+// ============================================================
+// ブロック破壊・設置
+// ============================================================
+canvasEl.addEventListener('mousedown', e => {
+  if (!locked) return;
+  const dir = new THREE.Vector3();
+  camera.getWorldDirection(dir);
+  const origin = camera.position.clone();
+  const hit = raycastVoxel(origin, dir, 7);
+  if (!hit) return;
+
+  if (e.button === 0) {
+    // 壊す
+    setBlock(hit.x, hit.y, hit.z, BLOCK.AIR);
+    // 壊した位置の周囲に水があれば、そこから新しくできた空間に水が流れ込む
+    // （堰き止められていた水が壊した穴から流れ出す本家の挙動を再現する。
+    //   実際の広がりは秒速4ブロックで時間をかけて進むため、ここでは予約だけ行う）
+    triggerWaterSpreadAround(hit.x, hit.y, hit.z);
+    rebuildAffectedChunks(hit.x, hit.y, hit.z);
+    triggerArmSwing();
+  } else if (e.button === 2) {
+    // 置く
+    const px = hit.x + hit.normal.x;
+    const py = hit.y + hit.normal.y;
+    const pz = hit.z + hit.normal.z;
+    // プレイヤーの位置と重ならないようにチェック（プレイヤーの半径・身長をきちんと考慮した判定に統一）
+    const overlaps = player.pos.x + player.radius > px && player.pos.x - player.radius < px + 1 &&
+                      player.pos.z + player.radius > pz && player.pos.z - player.radius < pz + 1 &&
+                      player.pos.y + player.height > py && player.pos.y < py + 1;
+    if (!overlaps) {
+      const placingId = hotbarBlocks[selectedSlot];
+      setBlock(px, py, pz, placingId);
+      if (placingId === BLOCK.WATER) {
+        // 水ブロックを設置した場合、そこは新しい水源として扱う。
+        // 水源として登録した上で、そこを起点に流動シミュレーション（秒速4ブロックでの広がり）も開始する。
+        waterLevel.set(key(px, py, pz), 0);
+        scheduleWaterSpread(px, py, pz, 0, 0);
+      }
+      rebuildAffectedChunks(px, py, pz);
+      triggerArmSwing();
+    }
+  }
+});
+canvasEl.addEventListener('contextmenu', e => e.preventDefault());
+
+// ============================================================
+// 物理・衝突判定
+// ============================================================
+const GRAVITY = -28;
+// 平地垂直ジャンプで最高到達点が約1.252ブロックになるよう調整 (v = sqrt(2*|g|*h))
+const JUMP_SPEED = Math.sqrt(2 * Math.abs(GRAVITY) * 1.252); // ≈ 8.37 m/s
+const WALK_SPEED = 4.317;
+const RUN_SPEED = WALK_SPEED * 1.3;
+const RUN_SPEED_JUMP = 7.0; // ダッシュジャンプ時の水平速度（秒速ブロック）
+
+function collidesAt(pos) {
+  const r = player.radius;
+  const minX = Math.floor(pos.x - r), maxX = Math.floor(pos.x + r);
+  const minZ = Math.floor(pos.z - r), maxZ = Math.floor(pos.z + r);
+  const minY = Math.floor(pos.y), maxY = Math.floor(pos.y + player.height);
+  for (let x = minX; x <= maxX; x++)
+    for (let y = minY; y <= maxY; y++)
+      for (let z = minZ; z <= maxZ; z++)
+        if (isOpaque(getBlock(x,y,z))) return true;
+  return false;
+}
+
+// ------ 水流によるエンティティの押し流し ------
+// 仕様(Wikiの「流れ」節に基づく):
+//   ・流れる水は、1.39メートル/秒でエンティティを押す
+//   ・水平方向の水流の向きは、そこへ流れ込むベクトルと、そこから流れ出すベクトルの和
+// このゲームでは「流れ込み/流れ出しベクトル」を明示的に保持していないため、
+// 水源(waterLevelが小さい)から流れ(waterLevelが大きい)へ向かう方向を推定することで近似する。
+// 具体的には、あるマスを中心に東西南北を見て、「自分より浅い(levelが大きい)隣」への方向を
+// 押し出しベクトルとして、「自分より深い(levelが小さい)隣」からの方向を流れ込みベクトルとして
+// 合成し、その和を流れの向きとする。水源ブロック(level=0)自体は本家でも流れを起こさないため
+// 押し流しの対象外とする。
+const WATER_PUSH_SPEED = 1.39; // メートル/秒（Wiki記載の値をそのまま採用）
+function getWaterFlowDirectionAt(x, y, z) {
+  if (getBlock(x, y, z) !== BLOCK.WATER) return null;
+  const level = waterLevel.get(key(x,y,z));
+  if (level === undefined || level === 0) return null; // 水源そのものは流れを起こさない
+
+  let dirX = 0, dirZ = 0;
+  const dirs = [[1,0],[-1,0],[0,1],[0,-1]];
+  for (const [ddx, ddz] of dirs) {
+    const nx = x+ddx, nz = z+ddz;
+    if (getBlock(nx, y, nz) !== BLOCK.WATER) continue;
+    const nLevel = waterLevel.get(key(nx,y,nz));
+    if (nLevel === undefined) continue;
+    if (nLevel < level) {
+      // (ddx,ddz)方向は自分より水源に近い(浅い)側。水はそちらから自分へ流れ込んでくるので、
+      // 流れ込みベクトルの向きは「その方向とは逆」＝ -(ddx,ddz)。
+      dirX -= ddx; dirZ -= ddz;
+    } else if (nLevel > level) {
+      // (ddx,ddz)方向は自分より水源から遠い(深い)側。水は自分からそちらへ流れ出していくので、
+      // 流れ出しベクトルの向きはそのまま (ddx,ddz)。
+      dirX += ddx; dirZ += ddz;
+    }
+  }
+  if (dirX === 0 && dirZ === 0) return null;
+  const len = Math.hypot(dirX, dirZ);
+  return { x: dirX/len, z: dirZ/len };
+}
+
+// プレイヤーの体積が触れている水ブロックすべての流れベクトルを合成し、
+// 秒速1.39メートルで押し流す（本家準拠）。クリエイティブ飛行モードは実装していないため
+// 常時プレイヤーが対象になる。
+// 実際の移動は、この関数で速度を書き換えた後、あとの衝突判定付きの
+// X/Y/Z軸別移動処理でまとめて適用する（直接pos座標を動かすと壁のすり抜けを招くため）。
+function applyWaterFlowPush(dt) {
+  const r = player.radius;
+  const minX = Math.floor(player.pos.x - r), maxX = Math.floor(player.pos.x + r);
+  const minZ = Math.floor(player.pos.z - r), maxZ = Math.floor(player.pos.z + r);
+  const minY = Math.floor(player.pos.y), maxY = Math.floor(player.pos.y + player.height);
+  let sumX = 0, sumZ = 0, count = 0;
+  for (let x = minX; x <= maxX; x++) {
+    for (let y = minY; y <= maxY; y++) {
+      for (let z = minZ; z <= maxZ; z++) {
+        const dir = getWaterFlowDirectionAt(x, y, z);
+        if (dir) { sumX += dir.x; sumZ += dir.z; count++; }
+      }
+    }
+  }
+  if (count === 0) return;
+  const len = Math.hypot(sumX, sumZ);
+  if (len === 0) return;
+  // 水流の目標速度(水平方向、秒速1.39メートル)へ、毎フレーム一定割合で近づける。
+  // 「加算し続ける」実装だと毎フレーム同じ値が積み重なって際限なく加速してしまうため、
+  // 目標値への収束（線形補間）にすることで、水流の中では常に一定速度に落ち着くようにする。
+  const targetVX = (sumX/len) * WATER_PUSH_SPEED;
+  const targetVZ = (sumZ/len) * WATER_PUSH_SPEED;
+  const converge = Math.min(1, dt * 5); // 収束の速さ（大きいほど素早く水流の速度に切り替わる）
+  player.vel.x += (targetVX - player.vel.x) * converge;
+  player.vel.z += (targetVZ - player.vel.z) * converge;
+}
+
+// プレイヤーの足元すぐ下にブロックがあるかどうかを明示的にチェックする。
+// 「Y方向に落下して衝突した瞬間だけonGroundをtrueにする」方式は、
+// 平地に静止しているだけでも重力→衝突→リセットの1フレームのズレで
+// onGroundがtrue/falseを行き来してしまい、空中用の低加速モデルが
+// 一瞬だけ挟まって「氷の上のように滑る」体感になる原因だった。
+// そのため、毎フレーム「今まさに足元にブロックがあるか」を直接調べて判定する。
+function isStandingOnGround(pos) {
+  const r = player.radius;
+  const minX = Math.floor(pos.x - r), maxX = Math.floor(pos.x + r);
+  const minZ = Math.floor(pos.z - r), maxZ = Math.floor(pos.z + r);
+  const footY = Math.floor(pos.y - 0.05); // 足元のわずか下（誤差吸収のマージン込み）
+  for (let x = minX; x <= maxX; x++)
+    for (let z = minZ; z <= maxZ; z++)
+      if (isOpaque(getBlock(x, footY, z))) return true;
+  return false;
+}
+
+// 移動の加速処理を正確に20tick/秒でシミュレートするためのアキュムレータ
+// （フレームレートに関わらず一定のtickレートを保つため）
+let moveTickAccumulator = 0;
+
+function updatePhysics(dt) {
+  // フレームの最初に、足元の直下にブロックがあるかを明示的に判定して onGround を確定させる。
+  // これにより「衝突検出のタイミングのズレでonGroundが1フレームだけfalseになる」問題を防ぎ、
+  // 平地では常に安定して地上の加速モデルが使われるようにする。
+  // ただし、ジャンプ直後（vel.yが上向き）は空中扱いを優先するため対象外にする。
+  if (player.vel.y <= 0) {
+    player.onGround = isStandingOnGround(player.pos);
+  }
+
+  const forward = new THREE.Vector3(Math.sin(player.yaw), 0, Math.cos(player.yaw));
+  const right = new THREE.Vector3(Math.sin(player.yaw+Math.PI/2), 0, Math.cos(player.yaw+Math.PI/2));
+
+  let moveX = 0, moveZ = 0;
+  if (keys['KeyW']) { moveX -= forward.x; moveZ -= forward.z; }
+  if (keys['KeyS']) { moveX += forward.x; moveZ += forward.z; }
+  if (keys['KeyA']) { moveX -= right.x; moveZ -= right.z; }
+  if (keys['KeyD']) { moveX += right.x; moveZ += right.z; }
+  const len = Math.hypot(moveX, moveZ);
+  // 斜め入力（前進+左右同時押しなど、2方向のキーが同時に入っている状態）かどうかを判定
+  const diagonalInput =
+    (keys['KeyW'] || keys['KeyS']) && (keys['KeyA'] || keys['KeyD']);
+  if (len > 0) { moveX/=len; moveZ/=len; }
+  // Java版の「45度移動」増幅の再現: 斜め入力時はわずかに目標速度が上がる（前方単独よりわずかに速く進む）
+  const diagonalBoost = diagonalInput ? 1.03 : 1.0;
+
+  // Wキーが押されていない、または前進していない場合はダッシュを解除
+  const movingForward = keys['KeyW'];
+  const sprintActive = isSprinting && movingForward;
+
+  // ------------------------------------------------------------
+  // Minecraft Java版に近い「加算＋摩擦減衰」ベースの移動モデル
+  // ------------------------------------------------------------
+  // 本家の内部処理（1tick=1/20秒あたり）は次の2ステップの繰り返し:
+  //   1. velocity += inputDirection * accelPerTick
+  //   2. velocity *= friction
+  // 定常状態の速度は accelPerTick / (1 - friction) になるので、
+  // 「最終的にtargetSpeedへ収束する」ことを保証しつつ、地上は数tickで、
+  // 空中はゆっくり（=加速力が弱い）収束するよう、accelとfrictionをそれぞれ設定する。
+  const speed = sprintActive ? RUN_SPEED : WALK_SPEED;
+  const targetSpeed = speed * diagonalBoost;
+
+  const GROUND_FRICTION = 0.546; // 地上の1tickあたりの摩擦係数（低いほど急停止・急加速）
+  const AIR_FRICTION = 0.9092;   // 空中の1tickあたりの摩擦係数（高いほど収束がゆっくり）
+  const TICKS_PER_SEC = 20;
+
+  // v_new = (v_old + accel) * friction という漸化式の定常値は friction*accel/(1-friction) になるため、
+  // 「定常値が必ずtargetSpeedになる」ようそれぞれのfrictionからaccelを逆算する（accel = target*(1-f)/f）。
+  // 地上はfrictionが小さいため数tickで収束し、空中はfrictionが1に近いためゆっくりとしか収束しない
+  // （＝ジャンプの滞空時間内ではほとんど加速できない）という、求める挙動が自然に得られる。
+  const groundAccel = targetSpeed * (1 - GROUND_FRICTION) / GROUND_FRICTION;
+  const airAccel = targetSpeed * (1 - AIR_FRICTION) / AIR_FRICTION;
+
+  const friction = player.onGround ? GROUND_FRICTION : AIR_FRICTION;
+  const accel = player.onGround ? groundAccel : airAccel;
+
+  // フレームの経過時間をtick単位のアキュムレータに蓄積し、1tick分(1/20秒)たまるごとに
+  // 1回だけ加速+摩擦の処理を行う。これにより、フレームレートに関わらず必ず本家と同じ
+  // 「20tick/秒」の速さでシミュレートされる（forループの条件を dt*20 のままにすると
+  // 端数分もループが1回走ってしまい、実質のtickレートがフレームレートに引きずられてしまうため）。
+  moveTickAccumulator += dt * TICKS_PER_SEC;
+  moveTickAccumulator = Math.min(moveTickAccumulator, 5); // 極端なラグ時に大量のtickが一気に処理されるのを防ぐ
+  while (moveTickAccumulator >= 1) {
+    player.vel.x = (player.vel.x + moveX * accel) * friction;
+    player.vel.z = (player.vel.z + moveZ * accel) * friction;
+    moveTickAccumulator -= 1;
+  }
+
+  // FOVをダッシュ状態に応じて滑らかに補間
+  const targetFOV = sprintActive ? SPRINT_FOV : BASE_FOV;
+  camera.fov += (targetFOV - camera.fov) * Math.min(1, dt*10);
+  camera.updateProjectionMatrix();
+
+  // 重力
+  player.vel.y += GRAVITY * dt;
+  if (player.vel.y < -40) player.vel.y = -40;
+
+  if (keys['Space'] && player.onGround) {
+    player.vel.y = JUMP_SPEED;
+    player.onGround = false;
+
+    // ダッシュジャンプ: ダッシュ中にジャンプした瞬間、水平速度が一気に約7.0ブロック/秒まで引き上がる
+    if (sprintActive && len > 0) {
+      player.vel.x = moveX * RUN_SPEED_JUMP;
+      player.vel.z = moveZ * RUN_SPEED_JUMP;
+    }
+  }
+
+  // 水流による押し流し（触れている水ブロックがあれば、その流れの向きに秒速1.39mで押される）
+  applyWaterFlowPush(dt);
+
+  // X移動
+  let newPos = player.pos.clone();
+  newPos.x += player.vel.x * dt;
+  if (collidesAt(newPos)) newPos.x = player.pos.x;
+  // Z移動
+  newPos.z += player.vel.z * dt;
+  if (collidesAt(newPos)) newPos.z = player.pos.z;
+  // Y移動
+  newPos.y += player.vel.y * dt;
+  if (collidesAt(newPos)) {
+    if (player.vel.y < 0) {
+      // 落下による着地: めり込んだ分だけ戻すのではなく、足元のブロック天面ぴったりに
+      // Y座標をスナップさせる。dtやフレームレートのばらつきでめり込み量が毎フレーム変わると、
+      // 「衝突した位置に戻す」だけの実装ではカメラの高さが微妙に上下してガクガクした
+      // 見た目になってしまうため、常に同じ高さ（floor(footY)+1）に揃えることでこれを解消する。
+      const r = player.radius;
+      const minX = Math.floor(newPos.x - r), maxX = Math.floor(newPos.x + r);
+      const minZ = Math.floor(newPos.z - r), maxZ = Math.floor(newPos.z + r);
+      let landingY = -Infinity;
+      for (let x = minX; x <= maxX; x++) {
+        for (let z = minZ; z <= maxZ; z++) {
+          // 足元付近を上から順に見て、プレイヤーの足がめり込んでいるブロックの
+          // 天面のうち最も高い位置を着地面として採用する
+          const scanTop = Math.floor(player.pos.y + 0.01);
+          const scanBottom = Math.floor(newPos.y - 0.01);
+          for (let y = scanTop; y >= scanBottom; y--) {
+            if (isOpaque(getBlock(x, y, z))) {
+              landingY = Math.max(landingY, y + 1);
+              break;
+            }
+          }
+        }
+      }
+      if (landingY > -Infinity) {
+        newPos.y = landingY;
+      } else {
+        newPos.y = player.pos.y;
+      }
+      player.onGround = true;
+    } else {
+      newPos.y = player.pos.y;
+    }
+    player.vel.y = 0;
+  } else {
+    player.onGround = false;
+  }
+
+  player.pos.copy(newPos);
+
+  // ワールド外に落ちないようにリスポーン（ブロックに埋まらない安全な高さを探す）
+  if (player.pos.y < -10) {
+    generateChunk(...worldToChunk(0, 0)); // リスポーン地点のチャンクが未生成なら生成しておく
+    player.pos.set(0, findSafeSpawnY(0, 0), 0);
+    player.vel.set(0,0,0);
+  }
+
+  camera.position.set(player.pos.x, player.pos.y + player.eyeOffset, player.pos.z);
+  camera.rotation.order = 'YXZ';
+  camera.rotation.y = player.yaw;
+  camera.rotation.x = player.pitch;
+}
+
+// ============================================================
+// メインループ
+// ============================================================
+// 初期表示時点のシードをHUDに反映
+document.getElementById('seed-display-value').textContent = worldSeed;
+document.getElementById('seed-input').placeholder = String(worldSeed) + '（空欄でランダム生成）';
+
+const coordsEl = document.getElementById('coords');
+const chunkCountEl = document.getElementById('chunk-count');
+const visibleChunkCountEl = document.getElementById('visible-chunk-count');
+const queueCountEl = document.getElementById('queue-count');
+const fpsEl = document.getElementById('fps');
+// 描画距離・演算距離の表示をハードコードではなく実際の定数値から反映する
+// （SIM_DISTANCEをRENDER_DISTANCEから算出する変更をしても表示がズレないようにする）
+document.getElementById('render-distance').textContent = String(RENDER_DISTANCE);
+document.getElementById('sim-distance').textContent = String(SIM_DISTANCE);
+let lastTime = performance.now();
+let fpsAcc = 0, fpsCount = 0, fpsTimer = 0;
+
+// ------ チャンク単位のフラスタムカリング（視錐台カリング）用の使い回しオブジェクト ------
+// カメラの視界（視錐台）に入っていないチャンクは、GPUに送る前の時点で
+// Group.visible = false にして描画パイプラインから丸ごとスキップする。
+// これにより、視界の外にある無数のブロックの描画コストをゼロにできる。
+const frustum = new THREE.Frustum();
+const frustumMatrix = new THREE.Matrix4();
+const cullingSphere = new THREE.Sphere();
+let visibleChunkCount = 0;
+
+function updateChunkFrustumCulling() {
+  camera.updateMatrixWorld();
+  frustumMatrix.multiplyMatrices(camera.projectionMatrix, camera.matrixWorldInverse);
+  frustum.setFromProjectionMatrix(frustumMatrix);
+
+  visibleChunkCount = 0;
+  for (const group of chunkMeshGroups.values()) {
+    cullingSphere.center.copy(group.userData.chunkCenter);
+    cullingSphere.radius = group.userData.chunkBoundingRadius;
+    const inView = frustum.intersectsSphere(cullingSphere);
+    group.visible = inView;
+    if (inView) visibleChunkCount++;
+  }
+}
+
+function animate() {
+  requestAnimationFrame(animate);
+  const now = performance.now();
+  let dt = (now - lastTime) / 1000;
+  dt = Math.min(dt, 0.05);
+  lastTime = now;
+
+  if (locked) {
+    updatePhysics(dt);
+    // プレイヤーの現在位置に応じてチャンクの生成/破棄を予約する（境界を跨いだ時のみ実処理が走る）
+    updateChunks(player.pos.x, player.pos.z, false);
+  }
+  // キューにあるチャンクを少数ずつ処理する（フレームが止まらないよう常に呼ぶ）
+  processChunkQueues();
+
+  // 視点が向いているブロックのアウトライン更新
+  if (locked) {
+    const dir = new THREE.Vector3();
+    camera.getWorldDirection(dir);
+    const hit = raycastVoxel(camera.position, dir, 7);
+    if (hit) {
+      blockOutline.position.set(hit.x + 0.5, hit.y + 0.5, hit.z + 0.5);
+      blockOutline.visible = true;
+    } else {
+      blockOutline.visible = false;
+    }
+  } else {
+    blockOutline.visible = false;
+  }
+
+  // チャンク単位のフラスタムカリング: 視界に入っていないチャンクを描画対象から除外する
+  updateChunkFrustumCulling();
+
+  // 一人称視点の腕（振りアニメーション）を更新
+  updateArmSwing(dt);
+
+  // 水の流動シミュレーション: 待機中の広がりタスクのうち、時間が来たものを処理する
+  // （秒速4ブロックのペースで少しずつ水が広がっていく）
+  processWaterQueue();
+
+  fpsTimer += dt;
+  fpsCount++;
+  if (fpsTimer >= 0.5) {
+    fpsEl.textContent = Math.round(fpsCount / fpsTimer);
+    fpsTimer = 0; fpsCount = 0;
+  }
+  coordsEl.textContent = `${player.pos.x.toFixed(1)}, ${player.pos.y.toFixed(1)}, ${player.pos.z.toFixed(1)}`;
+  chunkCountEl.textContent = `${loadedChunks.size} (演算) / ${chunkMeshGroups.size} (描画)`;
+  visibleChunkCountEl.textContent = visibleChunkCount;
+  queueCountEl.textContent = `${chunkGenQueue.length} (生成待ち) / ${chunkMeshQueue.length} (描画待ち)`;
+
+  renderer.render(scene, camera);
+}
+animate();
+
+})();
+</script>
+</body>
+</html>
