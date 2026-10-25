@@ -55,6 +55,81 @@
     text-shadow: 0 0 3px #000, 0 0 3px #000;
   }
 
+  /* Vitals HUD (体力・満腹度・経験値バー、ホットバーの直上に表示) */
+  #vitals-bar {
+    position: fixed; bottom: 88px; left: 50%; transform: translateX(-50%);
+    z-index: 10; display: flex; flex-direction: column; align-items: center;
+    gap: 4px; pointer-events: none;
+  }
+  #xp-row {
+    position: relative;
+    width: 512px; height: 6px;
+    background: rgba(0,0,0,0.45);
+    border-radius: 2px;
+    box-shadow: inset 0 0 0 1px rgba(0,0,0,0.6);
+    overflow: hidden;
+  }
+  #xp-fill {
+    height: 100%; width: 0%;
+    background: linear-gradient(180deg, #7CFC3A 0%, #4fbf1a 100%);
+  }
+  #xp-level {
+    position: absolute; top: -19px; left: 50%; transform: translateX(-50%);
+    font-size: 15px; font-weight: 800; color: #7CFC3A;
+    text-shadow: -1.5px 0 #143d02, 1.5px 0 #143d02, 0 -1.5px #143d02, 0 1.5px #143d02,
+                 -1.5px -1.5px #143d02, 1.5px -1.5px #143d02, -1.5px 1.5px #143d02, 1.5px 1.5px #143d02;
+  }
+  #vitals-row {
+    width: 512px; display: flex; justify-content: space-between;
+  }
+  .icon-row { display: flex; }
+  .icon-row .icon {
+    width: 18px; height: 18px; margin-right: 1px;
+    background-size: 100% 100%; background-repeat: no-repeat;
+    filter: drop-shadow(1px 1px 0 rgba(0,0,0,0.55));
+  }
+  .icon-row .icon:last-child { margin-right: 0; }
+  /* ハート（体力）: CSSのみで塗りつぶしを描くピクセル風ハート */
+  .heart-icon {
+    position: relative; width: 18px; height: 18px;
+  }
+  .heart-icon::before, .heart-icon::after {
+    content: ''; position: absolute; width: 9px; height: 14px;
+    background: #4a0000; /* 空(未取得)のハートの下地は暗赤色 */
+    top: 1px;
+  }
+  .heart-icon::before { left: 0; border-radius: 9px 0 0 9px; }
+  .heart-icon::after  { left: 9px; border-radius: 0 9px 9px 0; }
+  .heart-icon.full::before, .heart-icon.full::after { background: #e6231e; }
+  .heart-icon.half::before { background: #e6231e; }
+  .heart-icon.half::after  { background: #4a0000; }
+  /* ドラムスティック（満腹度） */
+  .hunger-icon {
+    position: relative; width: 18px; height: 18px;
+  }
+  .hunger-icon::before {
+    content: ''; position: absolute; left: 3px; top: 2px; width: 10px; height: 9px;
+    background: #4a3418; border-radius: 60% 60% 50% 50%;
+  }
+  .hunger-icon::after {
+    content: ''; position: absolute; left: 1px; top: 9px; width: 6px; height: 7px;
+    background: #4a3418; border-radius: 0 0 4px 4px; transform: rotate(-20deg);
+  }
+  .hunger-icon.full::before, .hunger-icon.full::after { background: #a86a2d; }
+  .hunger-icon.half::before { background: #a86a2d; }
+
+  /* 酸素ゲージ（水中に完全に潜っている間、満腹度ゲージの代わりに表示される泡） */
+  .bubble-icon {
+    position: relative; width: 18px; height: 18px;
+  }
+  .bubble-icon::before {
+    content: ''; position: absolute; left: 2px; top: 2px; width: 14px; height: 14px;
+    border-radius: 50%; background: rgba(90, 160, 220, 0.35);
+    border: 2px solid rgba(170, 220, 255, 0.9);
+    box-sizing: border-box;
+  }
+  .bubble-icon.full::before { background: rgba(120, 190, 255, 0.55); }
+
   /* Item name popup (fades out) */
   #item-name-display {
     position: fixed; bottom: 92px; left: 50%; transform: translateX(-50%);
@@ -142,16 +217,103 @@
     color: #fff; font-size: 12px; text-shadow: 0 0 3px #000;
     opacity: 0.75;
   }
+
+  /* 被ダメージ時の赤い画面フラッシュ */
+  #damage-flash {
+    position: fixed; inset: 0; z-index: 60; pointer-events: none;
+    background: radial-gradient(ellipse at center, rgba(255,0,0,0.05) 30%, rgba(200,0,0,0.55) 100%);
+    opacity: 0; transition: opacity 0.08s ease-out;
+  }
+  #damage-flash.show { opacity: 1; transition: opacity 0.02s ease-out; }
+
+  /* 死亡時の赤いビネット（死亡演出中、常時じわじわ濃くなる） */
+  #death-vignette {
+    position: fixed; inset: 0; z-index: 70; pointer-events: none;
+    background: radial-gradient(ellipse at center, transparent 30%, rgba(120,0,0,0.75) 100%);
+    opacity: 0; transition: opacity 1s ease-in;
+  }
+  #death-vignette.show { opacity: 1; }
+
+  #death-screen {
+    position: fixed; inset: 0; z-index: 100;
+    background: radial-gradient(ellipse at center, #4a0000 0%, #140000 100%);
+    display: none; flex-direction: column; align-items: center; justify-content: center;
+    color: #fff; text-align: center;
+  }
+  #death-screen.show { display: flex; }
+  #death-screen h1 {
+    font-size: 50px; margin: 0 0 14px 0; letter-spacing: 1px;
+    text-shadow: 3px 3px 0 rgba(0,0,0,0.5); font-weight: 800;
+  }
+  #death-cause { margin: 0 0 4px 0; font-size: 15px; opacity: 0.9; }
+  #death-score { margin: 0 0 26px 0; font-size: 14px; opacity: 0.75; }
+  .death-btn {
+    padding: 12px 38px; font-size: 17px; font-weight: 700;
+    background: #6b6b6b; color: #fff; border: 3px solid #444;
+    border-radius: 6px; cursor: pointer; margin: 6px 0;
+    box-shadow: 0 4px 0 #333; transition: transform 0.05s;
+  }
+  .death-btn:hover { background: #7a7a7a; }
+  .death-btn:active { transform: translateY(4px); box-shadow: none; }
+
+  /* 体力ゲージが4(❤❤)以下のとき、ハートが小刻みに震える */
+  @keyframes heart-tremble {
+    0%, 100% { transform: translate(0, 0); }
+    25% { transform: translate(-1px, 1px); }
+    50% { transform: translate(1px, -1px); }
+    75% { transform: translate(-1px, -1px); }
+  }
+  #health-icons.low-health .heart-icon { animation: heart-tremble 0.15s infinite; }
+
+  /* インベントリ (Eキー) */
+  .slot .cnt, .islot .cnt { position:absolute; right:3px; bottom:1px; font-size:13px; font-weight:800; color:#fff; text-shadow:1px 1px 0 #333; }
+  .slot .emo, .islot .emo { font-size:24px; line-height:1; }
+  #inv-overlay { display:none; position:fixed; inset:0; z-index:50; background:rgba(0,0,0,.55); align-items:center; justify-content:center; }
+  #inv-panel { background:#c6c6c6; border:3px solid; border-color:#fff #555 #555 #fff; padding:14px; color:#404040; box-shadow:0 0 0 3px #000; }
+  #inv-top { display:flex; gap:4px; align-items:flex-start; margin-bottom:14px; }
+  #inv-armor { display:flex; flex-direction:column; gap:4px; }
+  #inv-char { width:96px; height:172px; background:#000; display:flex; align-items:center; justify-content:center; }
+  #inv-off { align-self:flex-end; }
+  #inv-craft { margin-left:auto; padding-top:14px; }
+  #inv-craft .lbl { font-size:14px; font-weight:700; margin-bottom:6px; text-align:center; }
+  #inv-craft .row { display:flex; align-items:center; gap:8px; }
+  #inv-cgrid { display:grid; grid-template-columns:repeat(2,40px); gap:4px; }
+  #inv-store, #inv-hot { display:grid; grid-template-columns:repeat(9,40px); gap:4px; }
+  #inv-hot { margin-top:10px; }
+  /* 作業台のクラフト画面 (3x3) */
+  #table-overlay { display:none; position:fixed; inset:0; z-index:50; background:rgba(0,0,0,.55); align-items:center; justify-content:center; }
+  #table-panel { background:#c6c6c6; border:3px solid; border-color:#fff #555 #555 #fff; padding:14px; color:#404040; box-shadow:0 0 0 3px #000; }
+  #table-craft { display:flex; flex-direction:column; align-items:center; gap:6px; margin-bottom:14px; }
+  #table-craft .lbl { font-size:14px; font-weight:700; }
+  #table-craft .row { display:flex; align-items:center; gap:10px; }
+  #table-cgrid { display:grid; grid-template-columns:repeat(3,40px); gap:4px; }
+  #table-store, #table-hot { display:grid; grid-template-columns:repeat(9,40px); gap:4px; }
+  #table-hot { margin-top:10px; }
+  #table-cursor { position:fixed; z-index:60; width:40px; height:40px; pointer-events:none; display:none; align-items:center; justify-content:center; transform:translate(-50%,-50%); }
+  #table-cursor .swatch { width:26px; height:26px; }
+  #table-cursor .cnt { position:absolute; right:0; bottom:0; font-size:13px; font-weight:800; color:#fff; text-shadow:1px 1px 0 #333; }
+  .islot { width:40px; height:40px; box-sizing:border-box; background:#8b8b8b; border:2px solid; border-color:#373737 #fff #fff #373737; position:relative; display:flex; align-items:center; justify-content:center; }
+  .islot:hover { background:#a8a8a8; }
+  .islot.drag { background:#b4b4ff; }
+  .islot:empty::before { content:attr(data-ph); font-size:20px; opacity:.3; }
+  .islot .swatch { width:26px; height:26px; box-shadow: inset -3px -4px 0 rgba(0,0,0,0.25), inset 3px 4px 0 rgba(255,255,255,0.15); }
+  #inv-cursor { position:fixed; z-index:60; width:40px; height:40px; pointer-events:none; display:none; align-items:center; justify-content:center; transform:translate(-50%,-50%); }
+  #inv-cursor .swatch { width:26px; height:26px; }
+  #inv-cursor .cnt { position:absolute; right:0; bottom:0; font-size:13px; font-weight:800; color:#fff; text-shadow:1px 1px 0 #333; }
+  #inv-tip { position:fixed; z-index:61; pointer-events:none; display:none; background:rgba(16,0,16,.94); border:2px solid #2a0a5e; color:#fff; padding:4px 8px; font-size:14px; white-space:pre-line; }
 </style>
 </head>
 <body>
 
 <div id="canvas-container"></div>
 <div id="crosshair"></div>
+<div id="damage-flash"></div>
+<div id="death-vignette"></div>
 
 <div id="hud-top">
   座標: <span id="coords">0, 0, 0</span><br>
   FPS: <span id="fps">--</span><br>
+  時刻: <span id="clock">--:--</span><br>
   描画距離: <span id="render-distance">4</span>チャンク　演算距離: <span id="sim-distance">4</span>チャンク<br>
   読み込み済みチャンク: <span id="chunk-count">--</span><br>
   視界内チャンク: <span id="visible-chunk-count">--</span>（フラスタムカリング後）<br>
@@ -159,9 +321,25 @@
 </div>
 
 <div id="item-name-display"></div>
+<div id="vitals-bar">
+  <div id="xp-row"><div id="xp-fill"></div><div id="xp-level">1</div></div>
+  <div id="vitals-row">
+    <div id="health-icons" class="icon-row"></div>
+    <div id="hunger-icons" class="icon-row"></div>
+    <div id="oxygen-icons" class="icon-row" style="display:none;"></div>
+  </div>
+</div>
 <div id="hotbar"></div>
 <div id="pause-hint">ESC でカーソル解除 / クリックで再開</div>
 <div id="current-seed-display">シード: <span id="seed-display-value">--</span></div>
+
+<div id="death-screen">
+  <h1>死んでしまった！</h1>
+  <p id="death-cause">地面に激突して死んでしまった</p>
+  <p id="death-score">スコア：<span id="death-score-value">0</span></p>
+  <button class="death-btn" id="respawn-btn">リスポーン</button>
+  <button class="death-btn" id="title-btn">タイトル画面</button>
+</div>
 
 <div id="start-screen">
   <h1>⛏ Voxel Craft</h1>
@@ -173,12 +351,19 @@
       <button id="random-seed-btn" title="ランダムなシードを生成">🎲</button>
     </div>
   </div>
+  <button id="mode-btn" style="margin-bottom:12px;padding:8px 22px;font-size:15px;font-weight:700;background:rgba(0,0,0,.35);color:#fff;border:2px solid rgba(255,255,255,.5);border-radius:5px;cursor:pointer">ゲームモード：サバイバル</button>
   <button id="start-btn">プレイ開始</button>
   <div id="instructions">
     <b>W A S D</b>：移動　　<b>スペース</b>：ジャンプ　　<b>マウス</b>：視点操作<br>
     <b>左クリック</b>：ブロックを壊す　　<b>右クリック</b>：ブロックを置く<br>
-    <b>1〜9 or マウスホイール</b>：ブロック選択　　<b>W連打（ダブルタップ）</b>：ダッシュ<br>
-    <b>ダッシュ中にジャンプ</b>：ダッシュジャンプでさらに加速
+    <b>E</b>：インベントリ開閉　　<b>Q</b>：アイテムを捨てる（Ctrl+Qで全部）　　<b>1〜9 or マウスホイール</b>：ブロック選択　　<b>W連打（ダブルタップ）</b>：ダッシュ<br>
+    <b>ダッシュ中にジャンプ</b>：ダッシュジャンプでさらに加速<br>
+    <b>左クリック長押し</b>：ブロックを掘る（硬さ・道具で時間が変わる）　<b>右クリック長押し</b>：食べる<br>
+    <b>F3+G</b>：ゲームモード切替　<b>F3+T</b>：時間を進める　<b>F3+Y</b>：時間停止　<b>クリエイティブ</b>：スペース2回連打で飛行<br>
+    木→板材→棒→ツルハシ／斧／シャベルをクラフト。石は<b>ツルハシ</b>で壊さないと何も落ちません<br>
+    <b>シフト（押し続け）</b>：スニーク（低速移動・段差から落ちない・低い隙間を通れる）<br>
+    3ブロックを超える高さから落下すると体力（ハート）が減り、0になると死亡します<br>
+    水中に完全に潜っていると酸素ゲージ（泡）が減っていき、0になると溺れてダメージを受けます
   </div>
 </div>
 
@@ -245,6 +430,8 @@ const BLOCK = {
   WATER: 8,
   BRICK: 9,
   COBBLESTONE: 10,
+  CRAFTING_TABLE: 11,
+  TORCH: 12,
 };
 
 const BLOCK_COLORS = {
@@ -257,9 +444,13 @@ const BLOCK_COLORS = {
   [BLOCK.PLANK]:  { all: 0xb98a55 },
   [BLOCK.BRICK]:  { all: 0xa8503c },
   [BLOCK.COBBLESTONE]: { all: 0x6e6e6e },
+  // 作業台: 上面は格子模様のある明るいオーク色、側面は道具が描かれた濃い茶色、
+  // 下面はオークの板材と同じテクスチャ（PLANKと同色）にする
+  [BLOCK.CRAFTING_TABLE]: { top: 0xc17a3d, side: 0x7a5230, bottom: 0xb98a55 },
   // WATERは実際のブロック描画では専用の半透明マテリアル(waterMat)を使うため
   // getMaterials()からは呼ばれないが、ホットバーのスワッチ色表示のために登録しておく
   [BLOCK.WATER]: { all: 0x4fa8e0 },
+  [BLOCK.TORCH]: { all: 0xffc34d },
 };
 
 // 表面ノイズ用の簡易テクスチャ生成
@@ -303,6 +494,7 @@ function getMaterials(blockId) {
   const sideMat = new THREE.MeshLambertMaterial({ map: makeTexture(side, 0.10, seedBase+2) });
   const bottomMat = new THREE.MeshLambertMaterial({ map: makeTexture(bottom, 0.10, seedBase+3) });
   const mats = [sideMat, sideMat, topMat, bottomMat, sideMat, sideMat];
+  mats.forEach(m => patchLit(m));
   materialCache[blockId] = mats;
   return mats;
 }
@@ -347,15 +539,167 @@ function getBlock(x,y,z){
   const v = world.get(key(x,y,z));
   return v === undefined ? BLOCK.AIR : v;
 }
+// ------ 光の管理（空の光 / ブロック光） ------
+// colTop: 列(x,z)で最も高い不透明ブロックのY（無ければ-1）。それより上のセルは「空に開けている」ので光レベル15（暗黙）。
+// skyMap: 影になっている空気セルの空の光レベル(1〜14)。blkMap: 松明などのブロック光レベル(1〜14)。
+const colTop = new Map();
+const skyMap = new Map();
+const blkMap = new Map();
+const DIRS6 = [[1,0,0],[-1,0,0],[0,1,0],[0,-1,0],[0,0,1],[0,0,-1]];
+const DIRS4 = [[1,0],[-1,0],[0,1],[0,-1]];
+const lightUniforms = { uSky: { value: 1 } }; // 昼夜による空の明るさ(0.12〜1)。全マテリアルで共有
+
+// ブロックの明るさ = max(空の光 × 昼夜の明るさ, ブロック光)。各インスタンスの色(r=空, g=ブロック光)から計算する
+function patchLit(mat) {
+  mat.onBeforeCompile = shader => {
+    shader.uniforms.uSky = lightUniforms.uSky;
+    shader.vertexShader = shader.vertexShader
+      .replace('#include <common>', '#include <common>\nvarying vec2 vLight;')
+      .replace('#include <begin_vertex>', '#include <begin_vertex>\n#ifdef USE_INSTANCING_COLOR\n vLight = instanceColor.xy;\n#else\n vLight = vec2(1.0, 0.0);\n#endif');
+    shader.fragmentShader = shader.fragmentShader
+      .replace('#include <common>', '#include <common>\nvarying vec2 vLight;\nuniform float uSky;')
+      .replace('#include <color_fragment>', 'diffuseColor.rgb *= max(max(vLight.x * uSky, vLight.y), 0.035);');
+  };
+  return mat;
+}
+const torchStickGeo = new THREE.BoxGeometry(0.12, 0.6, 0.12);
+const torchFlameGeo = new THREE.BoxGeometry(0.18, 0.18, 0.18);
+const torchStickMat = new THREE.MeshBasicMaterial({ color: 0x9a6b2f });
+const torchFlameMat = new THREE.MeshBasicMaterial({ color: 0xffd45a });
+
 function setBlock(x,y,z,id){
+  const k = key(x,y,z);
   if (id === BLOCK.AIR) {
-    world.delete(key(x,y,z));
-    waterLevel.delete(key(x,y,z));
+    world.delete(k);
+    waterLevel.delete(k);
   } else {
-    world.set(key(x,y,z), id);
+    world.set(k, id);
     // 水以外のブロックを置いた場合は、その位置に残っていたかもしれない水の重み情報を消しておく
-    if (id !== BLOCK.WATER) waterLevel.delete(key(x,y,z));
+    if (id !== BLOCK.WATER) waterLevel.delete(k);
   }
+  // 列の最上位の不透明ブロックを更新（光の「空に開けているか」判定に使う）
+  const ck = x + ',' + z, t = colTop.get(ck);
+  if (isOpaque(id)) {
+    if (t === undefined || y > t) colTop.set(ck, y);
+  } else if (t === y) {
+    let ny = y - 1;
+    while (ny >= 0 && !isOpaque(getBlock(x, ny, z))) ny--;
+    colTop.set(ck, ny); // 何も無ければ-1
+  }
+}
+function getSky(x, y, z) {
+  const t = colTop.get(x + ',' + z);
+  if (t === undefined) return 0;
+  if (y > t) return 15;
+  return skyMap.get(key(x, y, z)) || 0;
+}
+function lightCurve(l) { return l <= 0 ? 0 : Math.pow(0.8, 15 - l); } // 本家と同じ、1段階ごとに×0.8
+// ブロックの明るさは、隣接する非不透明セルの光の最大値を使う
+function cellLight(x, y, z) {
+  let s = 0, b = 0;
+  for (const [dx, dy, dz] of DIRS6) {
+    const nx = x + dx, ny = y + dy, nz = z + dz;
+    if (isOpaque(getBlock(nx, ny, nz))) continue;
+    const sv = getSky(nx, ny, nz); if (sv > s) s = sv;
+    const bv = blkMap.get(key(nx, ny, nz)) || 0; if (bv > b) b = bv;
+  }
+  return [s, b];
+}
+function spreadLight(map, queue, isSky, onWrite) {
+  for (let qi = 0; qi < queue.length; qi++) {
+    const [x, y, z] = queue[qi];
+    const v = map.get(key(x, y, z)) || 0;
+    if (v <= 1) continue;
+    for (const [dx, dy, dz] of DIRS6) {
+      const nx = x + dx, ny = y + dy, nz = z + dz;
+      if (isOpaque(getBlock(nx, ny, nz))) continue;
+      if (isSky) { const t = colTop.get(nx + ',' + nz); if (t === undefined || ny > t) continue; } // 空に開けたセルは暗黙の15
+      const k = key(nx, ny, nz);
+      if ((map.get(k) || 0) < v - 1) {
+        map.set(k, v - 1);
+        if (onWrite) onWrite(nx, nz);
+        queue.push([nx, ny, nz]);
+      }
+    }
+  }
+}
+// チャンク生成直後に、木の下・張り出しの影への光の回り込みを計算する（周囲1ブロックの既存チャンクにも影響する）
+function initChunkLight(cx, cz) {
+  const sx = cx * CHUNK_SIZE, sz = cz * CHUNK_SIZE;
+  const queue = [], touched = new Set();
+  const own = chunkKeyOf(cx, cz);
+  const mark = (x, z) => touched.add(chunkKeyOf(...worldToChunk(x, z)));
+  for (let x = sx - 1; x <= sx + CHUNK_SIZE; x++) {
+    for (let z = sz - 1; z <= sz + CHUNK_SIZE; z++) {
+      const T = colTop.get(x + ',' + z);
+      if (T === undefined) continue;
+      for (const [dx, dz] of DIRS4) {
+        const Tn = colTop.get((x + dx) + ',' + (z + dz));
+        if (Tn === undefined || Tn >= T) continue;
+        for (let y = Tn + 1; y <= T; y++) { // 隣の列の「空に開けたセル」と水平に接する影のセル
+          if (isOpaque(getBlock(x, y, z))) continue;
+          const k = key(x, y, z);
+          if ((skyMap.get(k) || 0) < 14) { skyMap.set(k, 14); mark(x, z); queue.push([x, y, z]); }
+        }
+      }
+    }
+  }
+  spreadLight(skyMap, queue, true, mark);
+  for (const ck of touched) {
+    if (ck !== own && chunkMeshGroups.has(ck)) { const [a, b] = ck.split(',').map(Number); buildChunkMesh(a, b); }
+  }
+}
+// プレイヤーがブロックを置く/壊したとき、周囲±15の光を作り直す。光が変わったチャンクのキー集合を返す
+function relightAround(cx0, cy0, cz0) {
+  const R = 15;
+  let yb = cy0 - 1;
+  while (yb > 0 && cy0 - yb < 96 && !isOpaque(getBlock(cx0, yb, cz0))) yb--;
+  const y0 = Math.max(0, Math.min(cy0 - R, yb)), y1 = cy0 + R;
+  const x0 = cx0 - R, x1 = cx0 + R, z0 = cz0 - R, z1 = cz0 + R;
+  const oldSky = new Map(), oldBlk = new Map();
+  for (let x = x0; x <= x1; x++) for (let z = z0; z <= z1; z++) {
+    for (let y = y0; y <= y1; y++) {
+      const k = key(x, y, z);
+      let v = skyMap.get(k); if (v !== undefined) { oldSky.set(k, v); skyMap.delete(k); }
+      v = blkMap.get(k); if (v !== undefined) { oldBlk.set(k, v); blkMap.delete(k); }
+    }
+  }
+  const qs = [], qb = [];
+  for (let x = x0; x <= x1; x++) for (let z = z0; z <= z1; z++) {
+    const T = colTop.get(x + ',' + z);
+    if (T === undefined) continue;
+    for (let y = y0; y <= y1; y++) {
+      const id = getBlock(x, y, z);
+      if (isOpaque(id)) continue;
+      const k = key(x, y, z);
+      const edge = x === x0 || x === x1 || z === z0 || z === z1 || y === y0 || y === y1;
+      if (id === BLOCK.TORCH) { blkMap.set(k, 14); qb.push([x, y, z]); }
+      if (y > T && !edge) continue;
+      let ss = 0, bs = 0;
+      for (const [dx, dy, dz] of DIRS6) {
+        const nx = x + dx, ny = y + dy, nz = z + dz;
+        if (y <= T) { const sv = getSky(nx, ny, nz); if (sv > ss) ss = sv; }
+        if (edge) { const bv = blkMap.get(key(nx, ny, nz)) || 0; if (bv > bs) bs = bv; }
+      }
+      if (ss > 1) { skyMap.set(k, ss - 1); qs.push([x, y, z]); }
+      if (bs > 1 && (blkMap.get(k) || 0) < bs - 1) { blkMap.set(k, bs - 1); qb.push([x, y, z]); }
+    }
+  }
+  spreadLight(skyMap, qs, true);
+  spreadLight(blkMap, qb, false);
+  const changed = new Set([chunkKeyOf(...worldToChunk(cx0, cz0))]);
+  const mark = (x, z) => changed.add(chunkKeyOf(...worldToChunk(x, z)));
+  const cmp = (oldM, newM, written) => {
+    for (const [k, v] of oldM) if ((newM.get(k) || 0) !== v) { const q = k.split(','); mark(+q[0], +q[2]); }
+    for (const [x, y, z] of written) if (!oldM.has(key(x, y, z))) mark(x, z);
+  };
+  cmp(oldSky, skyMap, qs);
+  cmp(oldBlk, blkMap, qb);
+  return changed;
+}
+function rebuildWithLight(x, y, z) {
+  const extra = relightAround(x, y, z);
+  rebuildAffectedChunksMulti([[x, y, z]], extra);
 }
 
 // ------ シード値付き乱数生成器（Mulberry32） ------
@@ -561,6 +905,8 @@ function generateChunk(cx, cz) {
       }
     }
   }
+
+  initChunkLight(cx, cz);
 }
 
 // 指定したワールド座標を中心に、演算距離内の未生成チャンクをすべて生成する
@@ -581,7 +927,7 @@ const chunkMeshGroups = new Map(); // key "cx,cz" -> THREE.Group（シーンに�
 const chunkGeometry = new THREE.BoxGeometry(1,1,1);
 
 function isOpaque(id) {
-  return id !== BLOCK.AIR && id !== BLOCK.WATER;
+  return id !== BLOCK.AIR && id !== BLOCK.WATER && id !== BLOCK.TORCH;
 }
 
 // 指定したX,Z座標において、プレイヤー(高さ2ブロック程度)がブロックに埋まらずに
@@ -631,6 +977,7 @@ function* buildChunkMeshSteps(cx, cz) {
 
   // ブロックタイプ毎に位置配列を集める
   const groups = {};
+  const torchPositions = [];
   const waterVoxelPositions = []; // 水面より下、または地形とは無関係な場所にある「内部の水」（キューブのまま）
   const waterSurfacePositions = []; // 上が空気に接している「水面」（薄い板で描画）
   for (let dx = 0; dx < CHUNK_SIZE; dx++) {
@@ -666,6 +1013,7 @@ function* buildChunkMeshSteps(cx, cz) {
       for (let y = yMin; y <= yMax; y++) {
         const id = getBlock(x, y, z);
         if (id === BLOCK.AIR) continue;
+        if (id === BLOCK.TORCH) { torchPositions.push([x,y,z]); continue; }
         if (id === BLOCK.WATER) {
           // 水は陸ブロックとは別に集計する（半透明・専用の面カリングが必要なため）。
           // 「水面」＝真上が空気に接している水、それ以外は「内部の水」として扱う。
@@ -718,6 +1066,14 @@ function* buildChunkMeshSteps(cx, cz) {
       mesh.setMatrixAt(i, dummy.matrix);
     });
     mesh.instanceMatrix.needsUpdate = true;
+    // 各ブロックの明るさ(r=空の光, g=ブロック光)をインスタンス色に焼き込む
+    const lightCol = new THREE.Color();
+    positions.forEach(([x,y,z], i) => {
+      const [sl, bl] = cellLight(x, y, z);
+      mesh.setColorAt(i, lightCol.setRGB(lightCurve(sl), lightCurve(bl), 0));
+    });
+    mesh.instanceColor.needsUpdate = true;
+    mesh.frustumCulled = false; // チャンク単位のカリングは自前で行っている
     mesh.userData.blockId = id;
     // インスタンス全体を包むバウンディングスフィアを計算しておくことで、
     // Three.jsの標準フラスタムカリング（視錐台の外にあるメッシュを描画スキップする処理）が
@@ -748,7 +1104,7 @@ function* buildChunkMeshSteps(cx, cz) {
   if (waterVoxelPositions.length || waterSurfacePositions.length) {
     // 仕様: 透明度50%の水色。Three.jsのopacityは「不透明度」なので、
     // 透明度50%（半分透ける）を表すには opacity: 0.5 を指定する。
-    const waterMat = new THREE.MeshLambertMaterial({ color: 0x4fa8e0, transparent: true, opacity: 0.5, depthWrite: false, side: THREE.DoubleSide });
+    const waterMat = patchLit(new THREE.MeshLambertMaterial({ color: 0x4fa8e0, transparent: true, opacity: 0.5, depthWrite: false, side: THREE.DoubleSide }));
 
     if (waterVoxelPositions.length) {
       const waterGeo = new THREE.BoxGeometry(1,1,1);
@@ -824,6 +1180,18 @@ function* buildChunkMeshSteps(cx, cz) {
     }
   }
 
+  if (torchPositions.length) {
+    const stick = new THREE.InstancedMesh(torchStickGeo, torchStickMat, torchPositions.length);
+    const flame = new THREE.InstancedMesh(torchFlameGeo, torchFlameMat, torchPositions.length);
+    const td = new THREE.Object3D();
+    torchPositions.forEach(([x,y,z], i) => {
+      td.position.set(x+0.5, y+0.3, z+0.5); td.updateMatrix(); stick.setMatrixAt(i, td.matrix);
+      td.position.set(x+0.5, y+0.66, z+0.5); td.updateMatrix(); flame.setMatrixAt(i, td.matrix);
+    });
+    stick.instanceMatrix.needsUpdate = flame.instanceMatrix.needsUpdate = true;
+    stick.frustumCulled = flame.frustumCulled = false;
+    group.add(stick); group.add(flame);
+  }
   scene.add(group);
   // チャンク単位のフラスタムカリング（視錐台カリング）で使うための中心座標と半径を記録しておく。
   // チャンクは16x16ブロックの範囲に、地形の高さ+木の分の高さを持つ直方体なので、
@@ -888,7 +1256,9 @@ function unloadChunkData(cx, cz) {
       for (let y = Math.max(0, h-20); y <= h+12; y++) {
         world.delete(key(x,y,z));
         waterLevel.delete(key(x,y,z));
+        skyMap.delete(key(x,y,z)); blkMap.delete(key(x,y,z));
       }
+      colTop.delete(x + ',' + z);
     }
   }
   loadedChunks.delete(ckey);
@@ -1062,8 +1432,8 @@ function rebuildAffectedChunks(x, y, z) {
 // 複数座標をまとめて受け取り、影響を受けるチャンク集合を1回だけ再構築する版。
 // 水の流動シミュレーションでは一度に多数のブロックが変化するため、座標ごとに
 // 毎回buildChunkMeshを呼ぶと同じチャンクを何度も再構築してしまい非常に無駄になる。
-function rebuildAffectedChunksMulti(coords) {
-  const toRebuild = new Set();
+function rebuildAffectedChunksMulti(coords, extraKeys) {
+  const toRebuild = new Set(extraKeys || []);
   for (const [x,,z] of coords) {
     const [ccx, ccz] = worldToChunk(x, z);
     toRebuild.add(chunkKeyOf(ccx, ccz));
@@ -1322,7 +1692,7 @@ function raycastVoxel(origin, dir, maxDist) {
   let lastNormal = new THREE.Vector3();
   while (dist < maxDist) {
     const b = getBlock(x,y,z);
-    if (isOpaque(b)) {
+    if (isOpaque(b) || b === BLOCK.TORCH) {
       return { x, y, z, normal: lastNormal.clone() };
     }
     if (tMaxX < tMaxY && tMaxX < tMaxZ) {
@@ -1355,12 +1725,15 @@ const player = {
   height: 1.7,
   radius: 0.28,
   eyeOffset: 1.6,
+  fallStartY: 0,
 };
+player.fallStartY = player.pos.y;
 camera.position.copy(player.pos).setY(player.pos.y + player.eyeOffset);
 
 const keys = {};
 let isSprinting = false;
 let lastWPressTime = -Infinity;
+let lastSpacePressTime = -Infinity;
 const DOUBLE_TAP_WINDOW = 300; // ms
 
 window.addEventListener('keydown', e => {
@@ -1373,6 +1746,17 @@ window.addEventListener('keydown', e => {
       }
       lastWPressTime = now;
     }
+    // クリエイティブ: スペース2回連打で飛行の切り替え
+    if (e.code === 'Space' && gameMode === 'creative' && locked) {
+      const now2 = performance.now();
+      if (now2 - lastSpacePressTime < DOUBLE_TAP_WINDOW) { player.flying = !player.flying; player.vel.y = 0; }
+      lastSpacePressTime = now2;
+    }
+  }
+  if ((invOpen || tableOpen) && e.code !== 'KeyE' && e.code !== 'Escape') {
+    const n = parseInt(e.key);
+    if (n >= 1 && n <= 9) hoverSwap(n-1);
+    return;
   }
   keys[e.code] = true;
   const num = parseInt(e.key);
@@ -1393,6 +1777,13 @@ document.getElementById('start-btn').addEventListener('click', () => {
   const seedValue = seedInput === '' ? (Date.now() + '-' + Math.random()) : seedInput;
 
   applySeed(seedValue);
+  resetInventory(startMode);
+  dayTime = 0.02;
+  resetPlayerStats();
+  player.health = VITALS.maxHealth; player.oxygen = VITALS.maxOxygen; player.dead = false;
+  clearItemEntities();
+  setGameMode(startMode);
+  render();
 
   // 既存のワールドデータ・チャンク管理状態・メッシュを全て破棄してクリーンな状態に戻す
   world.clear();
@@ -1421,7 +1812,7 @@ document.getElementById('random-seed-btn').addEventListener('click', () => {
   document.getElementById('seed-input').value = Math.floor(Math.random() * 1e9);
 });
 canvasEl.addEventListener('click', () => {
-  if (!locked) canvasEl.requestPointerLock();
+  if (!locked && !player.dead) canvasEl.requestPointerLock();
 });
 document.addEventListener('pointerlockchange', () => {
   locked = document.pointerLockElement === canvasEl;
@@ -1452,34 +1843,666 @@ document.addEventListener('mousemove', e => {
 // ============================================================
 // ホットバー / ブロック選択
 // ============================================================
-const hotbarBlocks = [BLOCK.AIR, BLOCK.GRASS, BLOCK.DIRT, BLOCK.STONE, BLOCK.SAND, BLOCK.WOOD, BLOCK.LEAVES, BLOCK.PLANK, BLOCK.BRICK, BLOCK.COBBLESTONE, BLOCK.WATER];
+const hotbarBlocks = [BLOCK.AIR, BLOCK.GRASS, BLOCK.DIRT, BLOCK.STONE, BLOCK.SAND, BLOCK.WOOD, BLOCK.LEAVES, BLOCK.PLANK, BLOCK.CRAFTING_TABLE];
 const blockNames = {
   [BLOCK.AIR]: '(なし)', [BLOCK.GRASS]: '草', [BLOCK.DIRT]: '土', [BLOCK.STONE]: '石', [BLOCK.SAND]: '砂',
   [BLOCK.WOOD]: '木', [BLOCK.LEAVES]: '葉', [BLOCK.PLANK]: '板材', [BLOCK.BRICK]: 'レンガ',
-  [BLOCK.COBBLESTONE]: '丸石', [BLOCK.WATER]: '水（水源）'
+  [BLOCK.COBBLESTONE]: '丸石', [BLOCK.WATER]: '水（水源）', [BLOCK.CRAFTING_TABLE]: '作業台', [BLOCK.TORCH]: '松明'
 };
 let selectedSlot = 0;
 const hotbarEl = document.getElementById('hotbar');
-hotbarBlocks.forEach((b, i) => {
+for (let i = 0; i < 9; i++) {
   const slot = document.createElement('div');
   slot.className = 'slot' + (i===0 ? ' active' : '');
-  if (b === BLOCK.AIR) {
-    // 「空欄」スロット: 何も持たない状態にして、一人称の腕モデルを確認しやすくするための枠
-    slot.innerHTML = `<span class="key">${i+1}</span><div class="swatch" style="background:transparent;border:1px dashed rgba(255,255,255,0.5)"></div>`;
-  } else if (b === BLOCK.WATER) {
-    // 水は半透明ブロックなので、スワッチも実際の見た目に近い半透明感で表示する
-    const col = BLOCK_COLORS[b].all;
-    slot.innerHTML = `<span class="key">${i+1}</span><div class="swatch" style="background:#${col.toString(16).padStart(6,'0')}; opacity:0.6"></div>`;
-  } else {
-    const col = BLOCK_COLORS[b].top || BLOCK_COLORS[b].all;
-    slot.innerHTML = `<span class="key">${i+1}</span><div class="swatch" style="background:#${col.toString(16).padStart(6,'0')}"></div>`;
-  }
-  slot.title = blockNames[b];
   slot.addEventListener('click', () => selectSlot(i));
   hotbarEl.appendChild(slot);
+}
+
+// ============================================================
+// インベントリ（Eキーで開閉）
+// 防具4 + 持ち物27 + ホットバー9 + オフハンド1 + 2x2クラフト
+// ============================================================
+// スタック上限: 武器・道具・防具=1 / 看板・雪玉=16 / その他(ブロック)=64
+const ITEMS = {
+  helmet:{n:'鉄のヘルメット',e:'⛑️',max:1,armor:0}, chest:{n:'鉄のチェストプレート',e:'🦺',max:1,armor:1},
+  legs:{n:'鉄のレギンス',e:'👖',max:1,armor:2}, boots:{n:'鉄のブーツ',e:'🥾',max:1,armor:3},
+  shield:{n:'盾',e:'🛡️',max:1,off:true}, pickaxe:{n:'鉄のツルハシ',e:'⛏️',max:1},
+  sign:{n:'看板',e:'🪧',max:16}, snowball:{n:'雪玉',e:'❄️',max:16},
+};
+Object.assign(ITEMS, {
+  stick:{n:'棒',e:'🥢',max:64},
+  apple:{n:'リンゴ',e:'🍎',max:64,food:4,sat:2.4},
+  wood_pickaxe:{n:'木のツルハシ',e:'⛏️',max:1,tool:{type:'pickaxe',tier:1,speed:2}},
+  wood_axe:{n:'木の斧',e:'🪓',max:1,tool:{type:'axe',tier:1,speed:2}},
+  wood_shovel:{n:'木のシャベル',e:'🥄',max:1,tool:{type:'shovel',tier:1,speed:2}},
+  stone_pickaxe:{n:'石のツルハシ',e:'⛏️',max:1,tool:{type:'pickaxe',tier:2,speed:4}},
+  stone_axe:{n:'石の斧',e:'🪓',max:1,tool:{type:'axe',tier:2,speed:4}},
+  stone_shovel:{n:'石のシャベル',e:'🥄',max:1,tool:{type:'shovel',tier:2,speed:4}},
+});
+ITEMS.pickaxe.tool = {type:'pickaxe',tier:3,speed:6};
+const maxOf = id => typeof id === 'number' ? 64 : ITEMS[id].max;
+const nameOf = id => typeof id === 'number' ? blockNames[id] : ITEMS[id].n;
+function iconHTML(st) {
+  if (!st) return '';
+  let ic;
+  if (typeof st.id === 'number') {
+    const c = BLOCK_COLORS[st.id], hex = '#' + (c.top || c.all).toString(16).padStart(6,'0');
+    ic = `<div class="swatch" style="background:${hex};${st.id===BLOCK.WATER?'opacity:.6':''}"></div>`;
+  } else ic = `<div class="emo">${ITEMS[st.id].e}</div>`;
+  return ic + (st.count > 1 ? `<span class="cnt">${st.count}</span>` : '');
+}
+const inv = Array(36).fill(null); // 0-8: ホットバー / 9-35: 持ち物
+const armor = [null,null,null,null], offhand = [null], craft = [null,null,null,null], result = [null];
+const tcraft = Array(9).fill(null), tresult = [null]; // 作業台のクラフト欄(3x3)と結果欄
+// インベントリ初期化。サバイバルは空から、クリエイティブは全ブロック入りキットで開始する
+function resetInventory(mode) {
+  inv.fill(null); armor.fill(null); offhand.fill(null); craft.fill(null); result.fill(null);
+  tcraft.fill(null); tresult.fill(null);
+  if (mode !== 'creative') return;
+  [BLOCK.GRASS, BLOCK.DIRT, BLOCK.STONE, BLOCK.SAND, BLOCK.WOOD, BLOCK.LEAVES, BLOCK.PLANK, BLOCK.CRAFTING_TABLE]
+    .forEach((id, k) => inv[k + 1] = { id, count: 64 });
+  [{id:BLOCK.BRICK,count:64},{id:BLOCK.COBBLESTONE,count:64},{id:BLOCK.WOOD,count:32},
+   {id:'helmet',count:1},{id:'chest',count:1},{id:'legs',count:1},{id:'boots',count:1},
+   {id:'shield',count:1},{id:'pickaxe',count:1},{id:'stone_axe',count:1},{id:'stone_shovel',count:1},
+   {id:'apple',count:16},{id:'stick',count:64},{id:BLOCK.TORCH,count:64}]
+    .forEach((st, k) => inv[9 + k] = st);
+}
+
+let cursor = null, hover = null, invOpen = false, f3 = false, advTip = false;
+let lastHeld = hotbarBlocks[selectedSlot];
+
+function syncHotbar(updateHeld) {
+  inv.slice(0, 9).forEach((st, i) => {
+    hotbarBlocks[i] = st && typeof st.id === 'number' ? st.id : BLOCK.AIR;
+    hotbarEl.children[i].innerHTML = `<span class="key">${i+1}</span>` + iconHTML(st);
+    hotbarEl.children[i].title = st ? nameOf(st.id) : '';
+  });
+  if (updateHeld && hotbarBlocks[selectedSlot] !== lastHeld) {
+    lastHeld = hotbarBlocks[selectedSlot];
+    updateHeldItemMesh();
+  }
+}
+syncHotbar(false);
+
+// --- DOM ---
+const invOv = document.createElement('div');
+invOv.id = 'inv-overlay';
+invOv.innerHTML = `<div id="inv-panel"><div id="inv-top"><div id="inv-armor"></div>
+<div id="inv-char"><canvas width="64" height="128"></canvas></div><div id="inv-off"></div>
+<div id="inv-craft"><div class="lbl">クラフト</div><div class="row"><div id="inv-cgrid"></div><div>➜</div><div id="inv-res"></div></div></div></div>
+<div id="inv-store"></div><div id="inv-hot"></div></div><div id="inv-cursor"></div><div id="inv-tip"></div>`;
+document.body.appendChild(invOv);
+const cursorEl = invOv.querySelector('#inv-cursor'), tipEl = invOv.querySelector('#inv-tip');
+invOv.addEventListener('contextmenu', e => e.preventDefault());
+
+// スキン（プレイヤー）
+(function(){
+  const g = invOv.querySelector('canvas').getContext('2d');
+  const r = (c,x,y,w,h) => { g.fillStyle = c; g.fillRect(x*4, y*4, w*4, h*4); };
+  r('#c08a6a',4,0,8,8); r('#3b2614',4,0,8,2); r('#fff',5,4,2,1); r('#fff',9,4,2,1); r('#4a3a9a',6,4,1,1); r('#4a3a9a',9,4,1,1);
+  r('#00a8a8',4,8,8,12); r('#00a8a8',0,8,4,5); r('#c08a6a',0,13,4,7); r('#00a8a8',12,8,4,5); r('#c08a6a',12,13,4,7);
+  r('#3a2a8a',4,20,4,12); r('#3a2a8a',8,20,4,12);
+})();
+
+const invEls = [];
+function mkSlot(parent, arr, i, ph) {
+  const el = document.createElement('div');
+  el.className = 'islot';
+  if (ph) el.dataset.ph = ph;
+  el.addEventListener('mousedown', e => {
+    e.preventDefault();
+    // クリックした瞬間の実座標をカーソル追従アイコンに即反映する。
+    // （ポインターロック解除直後は次のmousemoveまで座標が更新されず、
+    //   拾ったアイテムのアイコンが古い位置＝画面外などに表示されて
+    //   「アイテムが消えた」ように見えるバグの対策）
+    cursorEl.style.left = e.clientX + 'px'; cursorEl.style.top = e.clientY + 'px';
+    tCursorEl.style.left = e.clientX + 'px'; tCursorEl.style.top = e.clientY + 'px';
+    slotDown(arr, i, e, el);
+  });
+  el.addEventListener('mouseenter', () => {
+    hover = { arr, i };
+    if (dragging && cursor && arr !== result && accept(arr, i, cursor) && (!arr[i] || arr[i].id === cursor.id)
+        && !dragging.list.some(d => d.arr === arr && d.i === i)) {
+      dragging.list.push({ arr, i, el }); el.classList.add('drag');
+    }
+  });
+  el.addEventListener('mouseleave', () => { hover = null; tipEl.style.display = 'none'; });
+  parent.appendChild(el);
+  invEls.push({ el, arr, i });
+}
+const q = id => invOv.querySelector(id);
+['⛑️','🦺','👖','🥾'].forEach((ph, i) => mkSlot(q('#inv-armor'), armor, i, ph));
+mkSlot(q('#inv-off'), offhand, 0, '🛡️');
+for (let i = 0; i < 4; i++) mkSlot(q('#inv-cgrid'), craft, i);
+mkSlot(q('#inv-res'), result, 0);
+for (let i = 9; i < 36; i++) mkSlot(q('#inv-store'), inv, i);
+for (let i = 0; i < 9; i++) mkSlot(q('#inv-hot'), inv, i);
+
+// --- 作業台のクラフト画面 (3x3) ---
+const tableOv = document.createElement('div');
+tableOv.id = 'table-overlay';
+tableOv.innerHTML = `<div id="table-panel">
+<div id="table-craft"><div class="lbl">作業台</div><div class="row"><div id="table-cgrid"></div><div>➜</div><div id="table-res"></div></div></div>
+<div id="table-store"></div><div id="table-hot"></div></div><div id="table-cursor"></div>`;
+document.body.appendChild(tableOv);
+const tCursorEl = tableOv.querySelector('#table-cursor');
+tableOv.addEventListener('contextmenu', e => e.preventDefault());
+const tq = id => tableOv.querySelector(id);
+const tableEls = [];
+function mkTableSlot(parent, arr, i) {
+  const el = document.createElement('div');
+  el.className = 'islot';
+  el.addEventListener('mousedown', e => {
+    e.preventDefault();
+    // 理由は#inv-store側のコメントと同じ（拾った瞬間の座標を即反映）
+    cursorEl.style.left = e.clientX + 'px'; cursorEl.style.top = e.clientY + 'px';
+    tCursorEl.style.left = e.clientX + 'px'; tCursorEl.style.top = e.clientY + 'px';
+    slotDown(arr, i, e, el);
+  });
+  el.addEventListener('mouseenter', () => {
+    hover = { arr, i };
+    if (dragging && cursor && arr !== tresult && accept(arr, i, cursor) && (!arr[i] || arr[i].id === cursor.id)
+        && !dragging.list.some(d => d.arr === arr && d.i === i)) {
+      dragging.list.push({ arr, i, el }); el.classList.add('drag');
+    }
+  });
+  el.addEventListener('mouseleave', () => { hover = null; });
+  parent.appendChild(el);
+  tableEls.push({ el, arr, i });
+}
+for (let i = 0; i < 9; i++) mkTableSlot(tq('#table-cgrid'), tcraft, i);
+mkTableSlot(tq('#table-res'), tresult, 0);
+for (let i = 9; i < 36; i++) mkTableSlot(tq('#table-store'), inv, i);
+for (let i = 0; i < 9; i++) mkTableSlot(tq('#table-hot'), inv, i);
+// パネル外側のクリック: このゲームにはドロップアイテムが無いため、
+// 誤って外側をクリックしただけでアイテムが消滅しないよう、持ち物へ戻す（破棄しない）
+tableOv.addEventListener('mousedown', e => {
+  if (!cursor || e.target.closest('#table-panel')) return;
+  addItem(cursor); cursor = null;
+  render();
+});
+let tableOpen = false;
+function openTable() {
+  if (invOpen || tableOpen) return;
+  if (player.dead || document.getElementById('start-screen').style.display !== 'none') return;
+  tableOpen = true;
+  for (const k in keys) keys[k] = false;
+  isSprinting = false;
+  tableOv.style.display = 'flex';
+  document.exitPointerLock();
+  render();
+}
+function closeTable() {
+  tableOpen = false;
+  // クラフト欄・カーソルの持ち物は保持できないので持ち物へ戻す
+  tcraft.forEach((s, i) => { if (s) { addItem(s); tcraft[i] = null; } });
+  if (cursor) { addItem(cursor); cursor = null; }
+  hover = null;
+  tableOv.style.display = 'none';
+  render();
+  const p = canvasEl.requestPointerLock();
+  if (p && p.catch) p.catch(() => {});
+}
+
+// --- ロジック ---
+// 防具スロットには対応する防具のみ、オフハンドには盾のみ、出力枠には置けない
+function accept(arr, i, st) {
+  if (arr === result || arr === tresult) return false;
+  if (arr === armor) return typeof st.id === 'string' && ITEMS[st.id].armor === i;
+  if (arr === offhand) return typeof st.id === 'string' && !!ITEMS[st.id].off;
+  return true;
+}
+// ------ 形状付きレシピ（配置位置は自由、左右反転もOK） ------
+const RECIPES = [];
+function defRecipe(shape, key, out) {
+  const pat = shape.map(r => r.split('').map(ch => ch === '.' ? null : key[ch]));
+  RECIPES.push({ pat, h: pat.length, w: pat[0].length, out });
+}
+defRecipe(['W'], { W: BLOCK.WOOD }, { id: BLOCK.PLANK, count: 4 });
+defRecipe(['P', 'P'], { P: BLOCK.PLANK }, { id: 'stick', count: 4 });
+defRecipe(['PP', 'PP'], { P: BLOCK.PLANK }, { id: BLOCK.CRAFTING_TABLE, count: 1 });
+defRecipe(['W', 'S'], { W: BLOCK.WOOD, S: 'stick' }, { id: BLOCK.TORCH, count: 4 }); // 木を燃料に見立てた松明
+defRecipe(['CC', 'CC'], { C: BLOCK.COBBLESTONE }, { id: BLOCK.BRICK, count: 4 });
+[['wood', BLOCK.PLANK], ['stone', BLOCK.COBBLESTONE]].forEach(([m, mat]) => {
+  const key = { M: mat, S: 'stick' };
+  defRecipe(['MMM', '.S.', '.S.'], key, { id: m + '_pickaxe', count: 1 });
+  defRecipe(['MM', 'MS', '.S'], key, { id: m + '_axe', count: 1 });
+  defRecipe(['M', 'S', 'S'], key, { id: m + '_shovel', count: 1 });
+});
+function matchRecipe(grid, w) {
+  const cells = [];
+  grid.forEach((s, i) => { if (s) cells.push([Math.floor(i / w), i % w]); });
+  if (!cells.length) return null;
+  const r0 = Math.min(...cells.map(c => c[0])), r1 = Math.max(...cells.map(c => c[0]));
+  const c0 = Math.min(...cells.map(c => c[1])), c1 = Math.max(...cells.map(c => c[1]));
+  const h = r1 - r0 + 1, ww = c1 - c0 + 1;
+  const rows = [];
+  for (let r = 0; r < h; r++) {
+    const row = [];
+    for (let c = 0; c < ww; c++) { const s = grid[(r0 + r) * w + c0 + c]; row.push(s ? s.id : null); }
+    rows.push(row);
+  }
+  for (const rec of RECIPES) {
+    if (rec.h !== h || rec.w !== ww) continue;
+    for (const mirror of [false, true]) {
+      let ok = true;
+      for (let r = 0; r < h && ok; r++)
+        for (let c = 0; c < ww; c++)
+          if (rec.pat[r][mirror ? ww - 1 - c : c] !== rows[r][c]) { ok = false; break; }
+      if (ok) return rec.out;
+    }
+  }
+  return null;
+}
+function updateResult() {
+  const r = matchRecipe(craft, 2);
+  result[0] = r ? { ...r } : null;
+}
+function updateTableResult() {
+  const r = matchRecipe(tcraft, 3);
+  tresult[0] = r ? { ...r } : null;
+}
+function addItem(st, from = 0, to = 36) { // 既存スタック優先 → 空きスロットの順で収納
+  for (const pass of [1, 2]) for (let i = from; i < to && st.count > 0; i++) {
+    const s = inv[i];
+    if (pass === 1 && s && s.id === st.id) { const n = Math.min(st.count, maxOf(st.id) - s.count); s.count += n; st.count -= n; }
+    if (pass === 2 && !s) { const n = Math.min(st.count, maxOf(st.id)); inv[i] = { id: st.id, count: n }; st.count -= n; }
+  }
+}
+const roomFor = id => inv.reduce((t, s) => t + (s ? (s.id === id ? maxOf(id) - s.count : 0) : maxOf(id)), 0);
+const regionOf = (arr, i) => arr === inv ? (i < 9 ? [0, 9] : [9, 36]) : [0, arr.length];
+// Shiftクリック: ホットバー⇔持ち物の移動 / 防具・オフハンドへ装備 / 他の枠→持ち物
+function quickMove(arr, i) {
+  const st = arr[i];
+  if (!st) return;
+  if (arr === inv) {
+    const d = typeof st.id === 'string' ? ITEMS[st.id] : null;
+    const t = d && (d.armor !== undefined ? armor : d.off ? offhand : null), ti = d && d.armor !== undefined ? d.armor : 0;
+    if (t && !t[ti]) { t[ti] = st; arr[i] = null; return; }
+    if (i < 9) addItem(st, 9, 36); else addItem(st, 0, 9);
+  } else addItem(st);
+  if (st.count <= 0) arr[i] = null;
+}
+// resultスロット配列から対応するクラフト欄配列・更新関数を引く
+function craftPairOf(arr) {
+  if (arr === result) return { grid: craft, update: updateResult };
+  if (arr === tresult) return { grid: tcraft, update: updateTableResult };
+  return null;
+}
+function shiftCraft(resArr) {
+  const pair = craftPairOf(resArr) || { grid: craft, update: updateResult };
+  for (let k = 0; k < 64; k++) {
+    pair.update();
+    const r = resArr[0];
+    if (!r || roomFor(r.id) < r.count) break;
+    addItem({ ...r });
+    pair.grid.forEach((s, i) => { if (s && --s.count <= 0) pair.grid[i] = null; });
+  }
+  render();
+}
+function dropFrom(arr, i, all) { // ワールドへ投げる（ドロップアイテムとして出現）
+  const s = arr[i];
+  if (!s) return;
+  const n = (all || s.count <= 1) ? s.count : 1;
+  s.count -= n;
+  if (s.count <= 0) arr[i] = null;
+  throwItem(s.id, n);
+  render();
+}
+let lastClick = { t: 0, arr: null, i: -1, pick: false }, lastShift = null, dragging = null;
+function slotDown(arr, i, e, el) {
+  const now = performance.now(), right = e.button === 2, prev = lastClick;
+  lastClick = { t: now, arr, i, pick: !cursor && !!arr[i] && !right };
+  if (arr === result || arr === tresult) return e.shiftKey ? shiftCraft(arr) : takeResult(arr);
+  if (e.shiftKey && !right) {
+    if (cursor && lastShift && lastShift.arr === arr && lastShift.i === i && now - lastShift.t < 300) {
+      // Shift+ダブルクリック（カーソルが持ち上げ中）: 同種のスタックを全て移動
+      const [a, b] = regionOf(arr, i);
+      for (let k = a; k < b; k++) if (arr[k] && arr[k].id === lastShift.id) quickMove(arr, k);
+      lastShift = null;
+    } else if (arr[i]) { lastShift = { t: now, arr, i, id: arr[i].id }; quickMove(arr, i); }
+    return render();
+  }
+  if (cursor && prev.pick && prev.arr === arr && prev.i === i && now - prev.t < 300 && !right) {
+    // ダブルクリック: 同じアイテムを全てカーソルに集める
+    for (const a of [inv, craft, tcraft]) for (let k = 0; k < a.length; k++) {
+      const s = a[k];
+      if (s && s.id === cursor.id && cursor.count < maxOf(s.id)) {
+        const n = Math.min(s.count, maxOf(s.id) - cursor.count);
+        cursor.count += n; s.count -= n; if (!s.count) a[k] = null;
+      }
+    }
+    return render();
+  }
+  if (cursor) { dragging = { btn: e.button, list: [{ arr, i, el }] }; return; } // ドラッグ分配の開始（確定はmouseup）
+  onSlot(arr, i, e);
+}
+window.addEventListener('mouseup', () => {
+  if (!dragging) return;
+  const d = dragging; dragging = null;
+  d.list.forEach(x => x.el.classList.remove('drag'));
+  if (!cursor) return;
+  if (d.list.length < 2) return onSlot(d.list[0].arr, d.list[0].i, { button: d.btn });
+  // 左ドラッグ: 均等に分割 / 右ドラッグ: 各スロットに1つずつ
+  const per = d.btn === 2 ? 1 : Math.max(1, Math.floor(cursor.count / d.list.length));
+  for (const x of d.list) {
+    if (cursor.count <= 0) break;
+    const s = x.arr[x.i], give = Math.min(per, maxOf(cursor.id) - (s ? s.count : 0), cursor.count);
+    if (give <= 0) continue;
+    if (s) s.count += give; else x.arr[x.i] = { id: cursor.id, count: give };
+    cursor.count -= give;
+  }
+  if (cursor.count <= 0) cursor = null;
+  render();
+});
+// パネル外側のクリック: このゲームにはドロップアイテムが無いため、
+// 誤って外側をクリックしただけでアイテムが消滅しないよう、持ち物へ戻す（破棄しない）
+invOv.addEventListener('mousedown', e => {
+  if (!cursor || e.target.closest('#inv-panel')) return;
+  addItem(cursor); cursor = null;
+  render();
+});
+function takeResult(resArr = result) {
+  const pair = craftPairOf(resArr) || { grid: craft };
+  const r = resArr[0];
+  if (!r) return;
+  if (!cursor) cursor = { ...r };
+  else if (cursor.id === r.id && cursor.count + r.count <= maxOf(r.id)) cursor.count += r.count;
+  else return;
+  pair.grid.forEach((s, i) => { if (s && --s.count <= 0) pair.grid[i] = null; });
+  render();
+}
+function onSlot(arr, i, e) {
+  if (arr === result || arr === tresult) return takeResult(arr);
+  const s = arr[i], right = e.button === 2;
+  if (!cursor) {
+    if (!s) return;
+    if (right) { const h = Math.ceil(s.count / 2); cursor = { id: s.id, count: h }; s.count -= h; if (!s.count) arr[i] = null; }
+    else { cursor = s; arr[i] = null; }
+  } else {
+    if (!accept(arr, i, cursor)) return;
+    const max = maxOf(cursor.id);
+    if (!s) { const n = right ? 1 : Math.min(cursor.count, max); arr[i] = { id: cursor.id, count: n }; cursor.count -= n; }
+    else if (s.id === cursor.id) { const n = Math.min(right ? 1 : cursor.count, max - s.count); s.count += n; cursor.count -= n; }
+    else if (!right) { arr[i] = cursor; cursor = s; }
+    if (cursor && cursor.count <= 0) cursor = null;
+  }
+  render();
+}
+// スロットにカーソルを合わせて 1〜9 でホットバーと入れ替え
+function hoverSwap(n) {
+  if (!hover || hover.arr === result || hover.arr === tresult) return;
+  const a = hover.arr[hover.i], b = inv[n];
+  if ((b && !accept(hover.arr, hover.i, b)) || (a && !accept(inv, n, a))) return;
+  hover.arr[hover.i] = b; inv[n] = a;
+  render();
+}
+function render() {
+  updateResult();
+  for (const { el, arr, i } of invEls) el.innerHTML = iconHTML(arr[i]);
+  updateTableResult();
+  for (const { el, arr, i } of tableEls) el.innerHTML = iconHTML(arr[i]);
+  cursorEl.innerHTML = iconHTML(cursor);
+  cursorEl.style.display = cursor ? 'flex' : 'none';
+  tCursorEl.innerHTML = iconHTML(cursor);
+  tCursorEl.style.display = cursor ? 'flex' : 'none';
+  syncHotbar(true);
+}
+function toggleInv() {
+  if (invOpen) return closeInv();
+  if (tableOpen) return;
+  if (player.dead || document.getElementById('start-screen').style.display !== 'none') return;
+  invOpen = true;
+  for (const k in keys) keys[k] = false;
+  isSprinting = false;
+  invOv.style.display = 'flex';
+  document.exitPointerLock();
+  render();
+}
+function closeInv() {
+  invOpen = false;
+  // クラフト欄・カーソルの持ち物は保持できないので持ち物へ戻す
+  craft.forEach((s, i) => { if (s) { addItem(s); craft[i] = null; } });
+  if (cursor) { addItem(cursor); cursor = null; }
+  hover = null;
+  invOv.style.display = 'none';
+  render();
+  const p = canvasEl.requestPointerLock();
+  if (p && p.catch) p.catch(() => {});
+}
+window.addEventListener('keydown', e => {
+  if (e.code === 'F3') { f3 = true; e.preventDefault(); }
+  if (e.code === 'KeyH' && f3) { advTip = !advTip; e.preventDefault(); }
+  if (e.code === 'KeyG' && f3 && !e.repeat) { setGameMode(gameMode === 'creative' ? 'survival' : 'creative'); e.preventDefault(); }
+  if (e.code === 'KeyT' && f3 && !e.repeat) { dayTime = ((Math.floor(dayTime * 4) + 1) / 4) % 1; e.preventDefault(); }
+  if (e.code === 'KeyY' && f3 && !e.repeat) { timeFrozen = !timeFrozen; showItemName(timeFrozen ? '時間停止' : '時間再開'); e.preventDefault(); }
+  if (e.code === 'KeyE' && !e.repeat) { if (tableOpen) closeTable(); else toggleInv(); }
+  if (e.code === 'Escape' && invOpen) closeInv();
+  if (e.code === 'Escape' && tableOpen) closeTable();
+  if (e.code === 'KeyQ' && !e.repeat) {
+    e.preventDefault();
+    if (invOpen) { if (hover && hover.arr !== result) dropFrom(hover.arr, hover.i, e.ctrlKey); }
+    else if (tableOpen) { if (hover && hover.arr !== tresult) dropFrom(hover.arr, hover.i, e.ctrlKey); }
+    else if (locked && !player.dead) dropFrom(inv, selectedSlot, e.ctrlKey);
+  }
+});
+window.addEventListener('keyup', e => { if (e.code === 'F3') f3 = false; });
+window.addEventListener('mousemove', e => {
+  if (invOpen) {
+    cursorEl.style.left = e.clientX + 'px'; cursorEl.style.top = e.clientY + 'px';
+    const st = hover && hover.arr[hover.i];
+    if (st && !cursor) {
+      tipEl.textContent = nameOf(st.id) + (advTip ? `\nID: ${st.id}` : '');
+      tipEl.style.display = 'block';
+      tipEl.style.left = (e.clientX + 14) + 'px'; tipEl.style.top = (e.clientY - 28) + 'px';
+    } else tipEl.style.display = 'none';
+  }
+  if (tableOpen) {
+    tCursorEl.style.left = e.clientX + 'px'; tCursorEl.style.top = e.clientY + 'px';
+  }
 });
 const itemNameEl = document.getElementById('item-name-display');
 let itemNameFadeTimeout = null;
+
+// ============================================================
+// 体力・満腹度・経験値バー（ホットバー直上のバニラ風HUD）
+// ============================================================
+// このゲームにはまだダメージや空腹の消費といったゲームシステムが無いため、
+// 現時点では満タンの値を保持・表示するだけの状態にしてある。
+// player.health / player.hunger / player.xpLevel / player.xpProgress を
+// 書き換えてrenderVitals()を呼べば、将来ダメージ処理などを追加した際にも
+// そのままHUDへ反映できる。
+const VITALS = {
+  maxHealth: 20,   // ハート10個 × 2
+  maxHunger: 20,   // ドラムスティック10個 × 2
+  maxOxygen: 10,   // 泡10個（Wiki「溺没」節の酸素ゲージに合わせ、1個=1単位）
+};
+player.health = VITALS.maxHealth;
+player.hunger = VITALS.maxHunger;
+player.oxygen = VITALS.maxOxygen;
+player.underwater = false; // 完全に水没している間 true（HUDの満腹度⇔酸素ゲージの切り替えに使う）
+player.xpLevel = 1;
+player.xpProgress = 0.18; // 0〜1（画像に合わせ、初期状態でも少しだけ緑のバーが見えるようにしておく）
+
+const healthIconsEl = document.getElementById('health-icons');
+const hungerIconsEl = document.getElementById('hunger-icons');
+const oxygenIconsEl = document.getElementById('oxygen-icons');
+const xpFillEl = document.getElementById('xp-fill');
+const xpLevelEl = document.getElementById('xp-level');
+
+// 10個ぶんのハート/ドラムスティック/泡のDOM要素をあらかじめ作っておき、
+// 以後はrenderVitals()内でクラス名(full/half/空)だけを切り替える。
+const healthIconEls = [];
+const hungerIconEls = [];
+const oxygenIconEls = [];
+for (let i = 0; i < 10; i++) {
+  const h = document.createElement('div');
+  h.className = 'icon heart-icon';
+  healthIconsEl.appendChild(h);
+  healthIconEls.push(h);
+}
+// 満腹度は本家同様、右詰め・右から左に減っていくように見えるようアイコンの並びを反転させる
+for (let i = 0; i < 10; i++) {
+  const hu = document.createElement('div');
+  hu.className = 'icon hunger-icon';
+  hungerIconsEl.appendChild(hu);
+  hungerIconEls.push(hu);
+}
+// 酸素ゲージも満腹度と同じく、右から減っていくように見せる
+for (let i = 0; i < 10; i++) {
+  const ox = document.createElement('div');
+  ox.className = 'icon bubble-icon';
+  oxygenIconsEl.appendChild(ox);
+  oxygenIconEls.push(ox);
+}
+
+function renderVitals() {
+  for (let i = 0; i < 10; i++) {
+    const remaining = player.health - i * 2;
+    healthIconEls[i].className = 'icon heart-icon ' + (remaining >= 2 ? 'full' : remaining === 1 ? 'half' : '');
+  }
+  // 体力ゲージが4(❤❤)以下のとき、ハートが小刻みに震える
+  healthIconsEl.classList.toggle('low-health', player.health > 0 && player.health <= 4);
+  for (let i = 0; i < 10; i++) {
+    // 右端(i=9)のアイコンから減っていくように、参照するインデックスを反転させる
+    const remaining = player.hunger - (9 - i) * 2;
+    hungerIconEls[i].className = 'icon hunger-icon ' + (remaining >= 2 ? 'full' : remaining === 1 ? 'half' : '');
+  }
+  // Wiki「溺没」節の通り、水中で完全に水没している間だけ満腹度ゲージの代わりに酸素ゲージ(泡)を表示する
+  hungerIconsEl.style.display = player.underwater ? 'none' : 'flex';
+  oxygenIconsEl.style.display = player.underwater ? 'flex' : 'none';
+  for (let i = 0; i < 10; i++) {
+    const remaining = Math.ceil(player.oxygen) - (9 - i);
+    oxygenIconEls[i].className = 'icon bubble-icon ' + (remaining >= 1 ? 'full' : '');
+  }
+  xpFillEl.style.width = Math.max(0, Math.min(1, player.xpProgress)) * 100 + '%';
+  xpLevelEl.textContent = String(player.xpLevel);
+}
+renderVitals();
+
+// ------ 溺没（酸素ゲージ） ------
+// Wiki「溺没」節の記載に基づく:
+//  ・水中で酸素ゲージが0になると、ほぼ毎秒2のダメージを受ける
+//  ・水面に顔を出す（完全に水没していない）と酸素ゲージは回復する
+const OXYGEN_DEPLETE_INTERVAL = 1.5; // 泡10個で約15秒もつよう、1.5秒ごとに1つ減らす
+const OXYGEN_REGEN_RATE = 4;         // 水面に出たら1秒あたり4ずつ素早く回復する
+const DROWN_DAMAGE_INTERVAL = 1.0;   // 酸素ゼロの間、約1秒ごとにダメージ
+let oxygenDepleteTimer = 0;
+let drownDamageTimer = 0;
+
+function updateOxygen(dt, submerged) {
+  if (submerged) {
+    if (player.oxygen > 0) {
+      oxygenDepleteTimer += dt;
+      while (oxygenDepleteTimer >= OXYGEN_DEPLETE_INTERVAL) {
+        oxygenDepleteTimer -= OXYGEN_DEPLETE_INTERVAL;
+        player.oxygen = Math.max(0, player.oxygen - 1);
+      }
+    }
+    if (player.oxygen <= 0) {
+      drownDamageTimer += dt;
+      if (drownDamageTimer >= DROWN_DAMAGE_INTERVAL) {
+        drownDamageTimer -= DROWN_DAMAGE_INTERVAL;
+        applyDamage(2, '溺れて死んでしまった');
+      }
+    } else {
+      drownDamageTimer = 0;
+    }
+  } else {
+    oxygenDepleteTimer = 0;
+    drownDamageTimer = 0;
+    if (player.oxygen < VITALS.maxOxygen) {
+      player.oxygen = Math.min(VITALS.maxOxygen, player.oxygen + OXYGEN_REGEN_RATE * dt);
+    }
+  }
+}
+
+// ============================================================
+// ダメージ・死亡処理
+// ============================================================
+player.dead = false;
+player.deathElapsed = 0; // 死亡演出（カメラの傾き・震え・ズームイン）の経過時間
+player.invincibleUntil = 0;  // この時刻(秒)まで無敵状態
+player.lastDamageAmount = 0; // 直近で無敵状態を発生させたダメージ量（無敵状態中の差分計算に使う）
+
+const damageFlashEl = document.getElementById('damage-flash');
+const deathVignetteEl = document.getElementById('death-vignette');
+const deathScreenEl = document.getElementById('death-screen');
+const deathCauseEl = document.getElementById('death-cause');
+const deathScoreValueEl = document.getElementById('death-score-value');
+
+// Wiki「無敵状態」節の通り、ダメージを受けた直後は短い時間（0.5秒=10tick）無敵になり、
+// その間に受けたダメージが直前以下なら無視され、直前より大きい場合はその差分だけが適用される。
+const INVINCIBILITY_DURATION = 0.5;
+
+// 体力ゲージに反映されない小さなダメージ(1未満)は無視される（Wiki「ハート」節の記載通り）
+function applyDamage(rawAmount, causeText) {
+  if (player.dead || rawAmount < 1 || gameMode === 'creative') return;
+
+  const now = performance.now() / 1000;
+  let amount = rawAmount;
+  if (now < player.invincibleUntil) {
+    if (rawAmount <= player.lastDamageAmount) return; // 無敵状態中、直前以下のダメージは無視
+    amount = rawAmount - player.lastDamageAmount;      // より大きいダメージは差分のみ適用
+  }
+  player.lastDamageAmount = rawAmount;
+  player.invincibleUntil = now + INVINCIBILITY_DURATION;
+
+  player.health = Math.max(0, player.health - amount);
+  addExhaustion(0.1);
+  renderVitals();
+
+  // 被ダメージ時の赤いフラッシュ
+  damageFlashEl.classList.add('show');
+  setTimeout(() => damageFlashEl.classList.remove('show'), 150);
+
+  if (player.health <= 0) triggerDeath(causeText);
+}
+
+function triggerDeath(causeText) {
+  if (player.dead) return;
+  player.dead = true;
+  player.deathElapsed = 0;
+  player.deathCameraBase = camera.position.clone();
+  player.vel.set(0, 0, 0);
+  releasePointerLock();
+  deathCauseEl.textContent = causeText || '死んでしまった';
+  deathScoreValueEl.textContent = '0'; // このゲームにはまだスコア制度が無いため、常に0を表示する
+  deathVignetteEl.classList.add('show');
+  // 「死んでしまった！」の文字と選択肢は、Wiki記載のカメラ演出（傾き・震え・ズームイン）が
+  // 見えるよう少し間を置いてから表示する
+  setTimeout(() => { if (player.dead) deathScreenEl.classList.add('show'); }, 900);
+}
+
+function respawnPlayer() {
+  resetPlayerStats();
+  player.health = VITALS.maxHealth;
+  player.oxygen = VITALS.maxOxygen;
+  player.underwater = false;
+  player.invincibleUntil = 0;
+  player.lastDamageAmount = 0;
+  player.dead = false;
+  player.deathElapsed = 0;
+  player.vel.set(0, 0, 0);
+  generateChunk(...worldToChunk(3, -6)); // リスポーン地点のチャンクが未生成なら生成しておく
+  player.pos.set(3, findSafeSpawnY(3, -6), -6);
+  player.fallStartY = player.pos.y;
+  camera.rotation.z = 0;
+  camera.fov = BASE_FOV;
+  camera.updateProjectionMatrix();
+  renderVitals();
+  deathScreenEl.classList.remove('show');
+  deathVignetteEl.classList.remove('show');
+}
+
+document.getElementById('respawn-btn').addEventListener('click', () => {
+  respawnPlayer();
+  canvasEl.requestPointerLock();
+});
+document.getElementById('title-btn').addEventListener('click', () => {
+  respawnPlayer();
+  document.getElementById('start-screen').style.display = 'flex';
+});
 
 function showItemName(text) {
   // アニメーションを確実に再スタートさせるため、一度クラスを外してリフローを挟む
@@ -1500,7 +2523,8 @@ function selectSlot(i) {
   selectedSlot = i;
   document.querySelectorAll('.slot').forEach((s,idx) => s.classList.toggle('active', idx===i));
   if (changed) {
-    showItemName(blockNames[hotbarBlocks[i]]);
+    const st = inv[i];
+    showItemName(st ? nameOf(st.id) : '');
     updateHeldItemMesh();
   }
 }
@@ -1526,7 +2550,13 @@ camera.add(armGroup);
 scene.add(camera); // camera自体をシーンに入れないと子(armGroup)が描画されないため
 
 const SKIN_COLOR = 0xdba36b;
-const armMat = new THREE.MeshLambertMaterial({ color: SKIN_COLOR, depthTest: false });
+// depthTest:false にすると深度バッファへの書き込みも行われなくなるため、そのままでは
+// 「不透明(opaque)パス」で先に描画されたあとに「半透明(transparent)パス」で水などが
+// 上から塗りつぶしてしまい、水に入っていないのに腕が水の下に隠れて見える不具合が起きる。
+// transparent:true を指定してTHREE.jsの半透明キューに乗せることで、renderOrderの大きい
+// 腕を（不透明の地形はもちろん）水よりも後に描画させ、常に一番手前に見えるようにする。
+const armMat = new THREE.MeshLambertMaterial({ color: SKIN_COLOR, depthTest: false, transparent: true });
+patchLit(armMat);
 const armGeo = new THREE.BoxGeometry(0.32, 0.32, 0.9);
 const armMesh = new THREE.Mesh(armGeo, armMat);
 armMesh.position.set(0, 0, -0.35); // グループ原点(肩)から前方(カメラ方向)に伸ばす
@@ -1558,7 +2588,9 @@ function updateHeldItemMesh() {
   }
   const mats = getMaterials(blockId).map(m => {
     const clone = m.clone();
+    patchLit(clone);
     clone.depthTest = false; // 地形に食い込まず常に手前に表示されるようにする
+    clone.transparent = true; // 腕本体と同様、水などの半透明オブジェクトより後に描画させるための対策
     return clone;
   });
   const geo = new THREE.BoxGeometry(0.42, 0.42, 0.42);
@@ -1605,24 +2637,24 @@ function updateArmSwing(dt) {
 // ============================================================
 // ブロック破壊・設置
 // ============================================================
+let mouseLeft = false, mouseRight = false;
 canvasEl.addEventListener('mousedown', e => {
   if (!locked) return;
+  // 左クリックは「押し続けて壊す」方式（updateMiningで毎フレーム処理）
+  if (e.button === 0) { mouseLeft = true; return; }
+  if (e.button === 2) mouseRight = true;
   const dir = new THREE.Vector3();
   camera.getWorldDirection(dir);
   const origin = camera.position.clone();
   const hit = raycastVoxel(origin, dir, 7);
   if (!hit) return;
 
-  if (e.button === 0) {
-    // 壊す
-    setBlock(hit.x, hit.y, hit.z, BLOCK.AIR);
-    // 壊した位置の周囲に水があれば、そこから新しくできた空間に水が流れ込む
-    // （堰き止められていた水が壊した穴から流れ出す本家の挙動を再現する。
-    //   実際の広がりは秒速4ブロックで時間をかけて進むため、ここでは予約だけ行う）
-    triggerWaterSpreadAround(hit.x, hit.y, hit.z);
-    rebuildAffectedChunks(hit.x, hit.y, hit.z);
-    triggerArmSwing();
-  } else if (e.button === 2) {
+  if (e.button === 2) {
+    // 作業台を右クリックした場合はブロックを置かず、作業台のクラフト画面を開く
+    if (getBlock(hit.x, hit.y, hit.z) === BLOCK.CRAFTING_TABLE) {
+      openTable();
+      return;
+    }
     // 置く
     const px = hit.x + hit.normal.x;
     const py = hit.y + hit.normal.y;
@@ -1633,6 +2665,8 @@ canvasEl.addEventListener('mousedown', e => {
                       player.pos.y + player.height > py && player.pos.y < py + 1;
     if (!overlaps) {
       const placingId = hotbarBlocks[selectedSlot];
+      if (placingId === BLOCK.AIR) return;
+      consumeHeldBlock();
       setBlock(px, py, pz, placingId);
       if (placingId === BLOCK.WATER) {
         // 水ブロックを設置した場合、そこは新しい水源として扱う。
@@ -1640,12 +2674,370 @@ canvasEl.addEventListener('mousedown', e => {
         waterLevel.set(key(px, py, pz), 0);
         scheduleWaterSpread(px, py, pz, 0, 0);
       }
-      rebuildAffectedChunks(px, py, pz);
+      rebuildWithLight(px, py, pz);
       triggerArmSwing();
     }
   }
 });
 canvasEl.addEventListener('contextmenu', e => e.preventDefault());
+window.addEventListener('mouseup', e => {
+  if (e.button === 0) mouseLeft = false;
+  if (e.button === 2) mouseRight = false;
+});
+window.addEventListener('blur', () => { mouseLeft = false; mouseRight = false; });
+
+// ============================================================
+// ゲームモード / 破壊時間 / ドロップアイテム / 空腹
+// ============================================================
+let gameMode = 'survival', startMode = 'survival';
+player.flying = false;
+player.saturation = 5;   // 隠し満腹度（空腹度より先に減る）
+player.exhaustion = 0;   // 消耗度（4たまると満腹度/空腹度が1減る）
+
+function setGameMode(m) {
+  gameMode = m;
+  document.getElementById('vitals-bar').style.display = m === 'creative' ? 'none' : 'flex';
+  player.flying = false;
+  if (m === 'creative') {
+    player.health = VITALS.maxHealth; player.hunger = VITALS.maxHunger; player.oxygen = VITALS.maxOxygen;
+    renderVitals();
+  }
+  showItemName(m === 'creative' ? 'クリエイティブモード' : 'サバイバルモード');
+}
+function resetPlayerStats() {
+  player.hunger = VITALS.maxHunger; player.saturation = 5; player.exhaustion = 0;
+  player.flying = false; regenTimer = 0; starveTimer = 0;
+}
+function consumeHeldBlock() {
+  if (gameMode === 'creative') return;
+  const st = inv[selectedSlot];
+  if (!st) return;
+  if (--st.count <= 0) inv[selectedSlot] = null;
+  syncHotbar(true);
+}
+
+// ------ 空腹・体力自然回復（本家準拠の消耗度モデル） ------
+let regenTimer = 0, starveTimer = 0;
+function addExhaustion(v) { if (gameMode !== 'creative') player.exhaustion += v; }
+function tickHunger(dt) {
+  if (gameMode === 'creative' || player.dead) return;
+  while (player.exhaustion >= 4) {
+    player.exhaustion -= 4;
+    if (player.saturation > 0) player.saturation = Math.max(0, player.saturation - 1);
+    else player.hunger = Math.max(0, player.hunger - 1);
+  }
+  if (player.hunger >= 18 && player.health < VITALS.maxHealth) {
+    starveTimer = 0;
+    // 満腹度が残っている満タン時は0.5秒ごと、それ以外(18以上)は4秒ごとに半ハート回復
+    const interval = (player.hunger >= 20 && player.saturation > 0) ? 0.5 : 4;
+    regenTimer += dt;
+    if (regenTimer >= interval) { regenTimer = 0; player.health = Math.min(VITALS.maxHealth, player.health + 1); addExhaustion(6); }
+  } else if (player.hunger <= 0) {
+    regenTimer = 0; starveTimer += dt;
+    if (starveTimer >= 4) { starveTimer = 0; if (player.health > 1) applyDamage(1, '餓死した'); } // ノーマル難易度同様、餓死では死なない
+  } else { regenTimer = 0; starveTimer = 0; }
+}
+
+// ------ 食べる（右クリック長押し 1.6秒） ------
+let eatTimer = 0;
+function heldFood() {
+  const st = inv[selectedSlot];
+  return st && typeof st.id === 'string' && ITEMS[st.id].food ? st : null;
+}
+function updateEating(dt) {
+  const f = heldFood();
+  if (!locked || player.dead || !mouseRight || !f || gameMode === 'creative' || player.hunger >= VITALS.maxHunger) { eatTimer = 0; return; }
+  eatTimer += dt;
+  if (eatTimer % 0.32 < dt) triggerArmSwing();
+  if (eatTimer >= 1.6) {
+    eatTimer = 0;
+    const d = ITEMS[f.id];
+    player.hunger = Math.min(VITALS.maxHunger, player.hunger + d.food);
+    player.saturation = Math.min(player.hunger, player.saturation + d.sat);
+    if (--f.count <= 0) inv[selectedSlot] = null;
+    syncHotbar(true); renderVitals();
+  }
+}
+
+// ------ ブロックの硬さ・必要ツール ------
+const BLOCK_PROPS = {
+  [BLOCK.GRASS]: { h: 0.6, tool: 'shovel' }, [BLOCK.DIRT]: { h: 0.5, tool: 'shovel' }, [BLOCK.SAND]: { h: 0.5, tool: 'shovel' },
+  [BLOCK.STONE]: { h: 1.5, tool: 'pickaxe', req: 1 }, [BLOCK.COBBLESTONE]: { h: 2, tool: 'pickaxe', req: 1 },
+  [BLOCK.BRICK]: { h: 2, tool: 'pickaxe', req: 1 },
+  [BLOCK.WOOD]: { h: 2, tool: 'axe' }, [BLOCK.PLANK]: { h: 2, tool: 'axe' }, [BLOCK.CRAFTING_TABLE]: { h: 2.5, tool: 'axe' },
+  [BLOCK.LEAVES]: { h: 0.2 },
+};
+BLOCK_PROPS[BLOCK.TORCH] = { h: 0 }; // 松明は一瞬で壊れる
+function heldTool() {
+  const st = inv[selectedSlot];
+  return st && typeof st.id === 'string' ? (ITEMS[st.id].tool || null) : null;
+}
+// 破壊時間(秒) = 硬さ × (適正ツールで回収可 1.5 / 不可 5) ÷ ツール速度
+function breakInfo(id) {
+  const p = BLOCK_PROPS[id] || { h: 0.5 };
+  const t = heldTool();
+  const match = !!(t && p.tool && t.type === p.tool);
+  const canHarvest = !p.req || (match && t.tier >= p.req);
+  return { time: p.h * (canHarvest ? 1.5 : 5) / (match ? t.speed : 1), canHarvest };
+}
+function dropsFor(id, canHarvest) {
+  if (!canHarvest) return [];
+  switch (id) {
+    case BLOCK.GRASS: return [{ id: BLOCK.DIRT, count: 1 }];
+    case BLOCK.STONE: return [{ id: BLOCK.COBBLESTONE, count: 1 }];
+    case BLOCK.LEAVES: {
+      const r = Math.random();
+      if (r < 0.05) return [{ id: 'apple', count: 1 }];
+      if (r < 0.15) return [{ id: 'stick', count: 1 }];
+      return [];
+    }
+    default: return [{ id, count: 1 }];
+  }
+}
+
+// ------ ひび割れ表示（10段階） ------
+const crackTextures = (() => {
+  const rng = mulberry32(12345), order = [], seen = new Set();
+  for (let w = 0; w < 7; w++) {
+    let x = 8, y = 8, ang = rng() * Math.PI * 2;
+    for (let s = 0; s < 14; s++) {
+      ang += (rng() - 0.5) * 1.2; x += Math.cos(ang) * 1.1; y += Math.sin(ang) * 1.1;
+      const px = Math.round(x), py = Math.round(y);
+      if (px < 0 || py < 0 || px > 15 || py > 15) break;
+      const k = px + ',' + py;
+      if (!seen.has(k)) { seen.add(k); order.push([px, py]); }
+    }
+  }
+  const texs = [];
+  for (let st = 0; st < 10; st++) {
+    const c = document.createElement('canvas'); c.width = c.height = 16;
+    const g = c.getContext('2d'); g.fillStyle = 'rgba(0,0,0,0.65)';
+    const n = Math.ceil(order.length * (st + 1) / 10);
+    for (let i = 0; i < n; i++) g.fillRect(order[i][0], order[i][1], 1, 1);
+    const t = new THREE.CanvasTexture(c); t.magFilter = t.minFilter = THREE.NearestFilter;
+    texs.push(t);
+  }
+  return texs;
+})();
+const crackMat = new THREE.MeshBasicMaterial({ map: crackTextures[0], transparent: true, depthWrite: false,
+  polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2 });
+const crackMesh = new THREE.Mesh(new THREE.BoxGeometry(1.003, 1.003, 1.003), crackMat);
+crackMesh.visible = false; crackMesh.renderOrder = 2;
+scene.add(crackMesh);
+
+let mining = null, mineCooldown = 0;
+function resetMining() { mining = null; crackMesh.visible = false; }
+function breakBlockAt(x, y, z, canHarvest) {
+  const id = getBlock(x, y, z);
+  setBlock(x, y, z, BLOCK.AIR);
+  // 壊した位置の周囲に水があれば、新しくできた空間に水が流れ込む（広がりは時間差で進む）
+  triggerWaterSpreadAround(x, y, z);
+  rebuildWithLight(x, y, z);
+  if (gameMode === 'survival') {
+    addExhaustion(0.005);
+    for (const d of dropsFor(id, canHarvest)) spawnItem(d.id, d.count, x + 0.5, y + 0.3, z + 0.5, { spread: true });
+  }
+}
+function updateMining(dt) {
+  if (mineCooldown > 0) mineCooldown -= dt;
+  if (!locked || player.dead || !mouseLeft) { resetMining(); return; }
+  const dir = new THREE.Vector3(); camera.getWorldDirection(dir);
+  const hit = raycastVoxel(camera.position, dir, 7);
+  if (!hit) { resetMining(); return; }
+  if (armSwingProgress >= 1) triggerArmSwing();
+  if (gameMode === 'creative') { // クリエイティブは即破壊（0.25秒間隔で連続破壊）
+    if (mineCooldown <= 0) { breakBlockAt(hit.x, hit.y, hit.z, true); mineCooldown = 0.25; }
+    resetMining(); return;
+  }
+  const id = getBlock(hit.x, hit.y, hit.z);
+  const held = inv[selectedSlot] ? inv[selectedSlot].id : null;
+  if (!mining || mining.x !== hit.x || mining.y !== hit.y || mining.z !== hit.z || mining.id !== id || mining.held !== held) {
+    mining = { x: hit.x, y: hit.y, z: hit.z, id, held, progress: 0 };
+  }
+  if (mineCooldown > 0) return;
+  const info = breakInfo(id);
+  mining.progress += dt;
+  if (mining.progress >= info.time) {
+    breakBlockAt(hit.x, hit.y, hit.z, info.canHarvest);
+    resetMining(); mineCooldown = 0.25;
+    return;
+  }
+  crackMat.map = crackTextures[Math.min(9, Math.floor(mining.progress / info.time * 10))];
+  crackMesh.position.set(hit.x + 0.5, hit.y + 0.5, hit.z + 0.5);
+  crackMesh.visible = true;
+}
+
+// ------ ドロップアイテム（エンティティ） ------
+const itemEntities = [];
+const itemBoxGeo = new THREE.BoxGeometry(0.28, 0.28, 0.28);
+const emojiTexCache = {};
+function itemSpriteTexture(id) {
+  if (emojiTexCache[id]) return emojiTexCache[id];
+  const c = document.createElement('canvas'); c.width = c.height = 64;
+  const g = c.getContext('2d');
+  g.font = '48px sans-serif'; g.textAlign = 'center'; g.textBaseline = 'middle';
+  g.fillText(ITEMS[id].e, 32, 34);
+  return emojiTexCache[id] = new THREE.CanvasTexture(c);
+}
+function removeItemEntity(i) {
+  const e = itemEntities[i];
+  scene.remove(e.obj);
+  if (e.obj.isSprite) e.obj.material.dispose();
+  itemEntities.splice(i, 1);
+}
+function clearItemEntities() { while (itemEntities.length) removeItemEntity(itemEntities.length - 1); }
+function spawnItem(id, count, x, y, z, opts = {}) {
+  // 近くの同種アイテムがあれば合流させて数を抑える
+  if (!opts.noMerge) {
+    for (const o of itemEntities) {
+      if (o.id === id && o.count + count <= maxOf(id) && o.pos.distanceToSquared(new THREE.Vector3(x, y, z)) < 1) {
+        o.count += count; o.age = Math.min(o.age, 60); return;
+      }
+    }
+  }
+  if (itemEntities.length >= 200) removeItemEntity(0);
+  let obj;
+  if (typeof id === 'number') obj = new THREE.Mesh(itemBoxGeo, getMaterials(id));
+  else {
+    obj = new THREE.Sprite(new THREE.SpriteMaterial({ map: itemSpriteTexture(id), transparent: true }));
+    obj.scale.set(0.5, 0.5, 1);
+  }
+  scene.add(obj);
+  const e = { id, count, obj, pos: new THREE.Vector3(x, y, z), vel: new THREE.Vector3(), age: 0,
+              delay: opts.delay !== undefined ? opts.delay : 0.5, bob: Math.random() * 6 };
+  if (opts.vel) e.vel.copy(opts.vel);
+  else if (opts.spread) e.vel.set((Math.random() - 0.5) * 2, 3, (Math.random() - 0.5) * 2);
+  itemEntities.push(e);
+}
+function throwItem(id, count) { // Qキー・インベントリ外へ捨てる
+  const dir = new THREE.Vector3(); camera.getWorldDirection(dir);
+  const p = camera.position;
+  spawnItem(id, count, p.x + dir.x * 0.4, p.y - 0.3, p.z + dir.z * 0.4,
+    { vel: new THREE.Vector3(dir.x * 5, dir.y * 5 + 1.5, dir.z * 5), delay: 2, noMerge: true });
+}
+function updateItemEntities(dt) {
+  for (let i = itemEntities.length - 1; i >= 0; i--) {
+    const e = itemEntities[i];
+    e.age += dt;
+    if (e.age > 300 || e.pos.y < -10) { removeItemEntity(i); continue; }
+    const [ccx, ccz] = worldToChunk(Math.floor(e.pos.x), Math.floor(e.pos.z));
+    if (!loadedChunks.has(chunkKeyOf(ccx, ccz))) continue; // 未読み込みチャンク上では停止
+
+    const bx = Math.floor(e.pos.x), bz = Math.floor(e.pos.z), by = Math.floor(e.pos.y + 0.1);
+    if (getBlock(bx, by, bz) === BLOCK.WATER) e.vel.y += (-1.0 - e.vel.y) * Math.min(1, dt * 4); // 水中はゆっくり沈む
+    else e.vel.y = Math.max(-15, e.vel.y - 25 * dt);
+
+    let nx = e.pos.x + e.vel.x * dt, nz = e.pos.z + e.vel.z * dt, ny = e.pos.y + e.vel.y * dt;
+    if (isOpaque(getBlock(Math.floor(nx), by, bz))) { e.vel.x *= -0.3; nx = e.pos.x; }
+    if (isOpaque(getBlock(Math.floor(nx), by, Math.floor(nz)))) { e.vel.z *= -0.3; nz = e.pos.z; }
+    let onGround = false;
+    if (e.vel.y <= 0 && isOpaque(getBlock(Math.floor(nx), Math.floor(ny), Math.floor(nz)))) {
+      ny = Math.floor(ny) + 1; e.vel.y = 0; onGround = true;
+    } else if (e.vel.y > 0 && isOpaque(getBlock(Math.floor(nx), Math.floor(ny + 0.3), Math.floor(nz)))) {
+      e.vel.y = 0; ny = e.pos.y;
+    }
+    if (isOpaque(getBlock(Math.floor(nx), Math.floor(ny + 0.1), Math.floor(nz)))) ny = Math.floor(ny + 0.1) + 1; // 埋まったら押し上げ
+    e.pos.set(nx, ny, nz);
+    const damp = Math.exp(-dt * (onGround ? 10 : 0.5));
+    e.vel.x *= damp; e.vel.z *= damp;
+
+    // 回収（近づくと吸い寄せられる）
+    if (locked && !player.dead && e.age >= e.delay) {
+      const dx = player.pos.x - e.pos.x, dy = (player.pos.y + 0.9) - (e.pos.y + 0.15), dz = player.pos.z - e.pos.z;
+      const d2 = dx * dx + dy * dy + dz * dz;
+      if (d2 < 2.25 && roomFor(e.id) > 0) {
+        if (d2 < 0.64) {
+          const before = e.count, st = { id: e.id, count: e.count };
+          addItem(st); e.count = st.count;
+          if (e.count < before) syncHotbar(true);
+          if (e.count <= 0) { removeItemEntity(i); continue; }
+        } else {
+          const d = Math.sqrt(d2);
+          e.vel.set(dx / d * 6, dy / d * 6, dz / d * 6);
+        }
+      }
+    }
+    const bobY = Math.sin(e.age * 2 + e.bob) * 0.05;
+    if (e.obj.isSprite) e.obj.position.set(e.pos.x, e.pos.y + 0.28 + bobY, e.pos.z);
+    else { e.obj.position.set(e.pos.x, e.pos.y + 0.2 + bobY, e.pos.z); e.obj.rotation.y = e.age * 1.5 + e.bob; }
+  }
+}
+
+// ============================================================
+// 昼夜サイクル（空の色・太陽・月・星・雲・光量）
+// ============================================================
+const DAY_LENGTH = 1200; // 1日の長さ(秒)。本家と同じ20分
+let dayTime = 0.02, timeFrozen = false, cloudDrift = 0; // 0=日の出, 0.25=正午, 0.5=日没, 0.75=真夜中
+const SKY_DAY = new THREE.Color(0x7ec8ff), SKY_NIGHT = new THREE.Color(0x060a1a), SKY_DUSK = new THREE.Color(0xf0864a);
+const skyTmp = new THREE.Color(), sunDirTmp = new THREE.Vector3();
+const clockEl = document.getElementById('clock');
+scene.add(sunLight.target);
+function makeSkyQuad(size, color) {
+  const m = new THREE.Mesh(new THREE.PlaneGeometry(size, size),
+    new THREE.MeshBasicMaterial({ color, fog: false, depthWrite: false, side: THREE.DoubleSide }));
+  m.frustumCulled = false; scene.add(m);
+  return m;
+}
+const sunMesh = makeSkyQuad(70, 0xfff4b8), moonMesh = makeSkyQuad(50, 0xdfe7f5);
+const starMat = new THREE.PointsMaterial({ color: 0xffffff, size: 2, sizeAttenuation: false, transparent: true, opacity: 0, fog: false, depthWrite: false });
+const stars = (() => {
+  const pos = new Float32Array(900 * 3), r = mulberry32(4242);
+  for (let i = 0; i < 900; i++) {
+    const u = r() * 2 - 1, a = r() * Math.PI * 2, q = Math.sqrt(1 - u * u);
+    pos[i*3] = q * Math.cos(a) * 470; pos[i*3+1] = u * 470; pos[i*3+2] = q * Math.sin(a) * 470;
+  }
+  const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+  const pts = new THREE.Points(g, starMat); pts.frustumCulled = false; scene.add(pts);
+  return pts;
+})();
+const CLOUD_CELL = 768; // テクスチャ1周ぶんのブロック数
+const cloudTex = (() => {
+  const c = document.createElement('canvas'); c.width = c.height = 64;
+  const g = c.getContext('2d'), r = mulberry32(777);
+  g.fillStyle = '#fff';
+  for (let i = 0; i < 34; i++) {
+    const w = 3 + Math.floor(r() * 8), h = 2 + Math.floor(r() * 5), x = Math.floor(r() * 64), y = Math.floor(r() * 64);
+    for (let dx = 0; dx < w; dx++) for (let dy = 0; dy < h; dy++) g.fillRect((x + dx) % 64, (y + dy) % 64, 1, 1);
+  }
+  const t = new THREE.CanvasTexture(c);
+  t.wrapS = t.wrapT = THREE.RepeatWrapping; t.magFilter = t.minFilter = THREE.NearestFilter;
+  t.repeat.set(1200 / CLOUD_CELL, 1200 / CLOUD_CELL);
+  return t;
+})();
+const cloudMat = new THREE.MeshBasicMaterial({ map: cloudTex, transparent: true, opacity: 0.85, fog: false, depthWrite: false, side: THREE.DoubleSide });
+const clouds = new THREE.Mesh(new THREE.PlaneGeometry(1200, 1200), cloudMat);
+clouds.rotation.x = -Math.PI / 2; clouds.frustumCulled = false; scene.add(clouds);
+
+function updateDayNight(dt) {
+  if (!timeFrozen) dayTime = (dayTime + dt / DAY_LENGTH) % 1;
+  const ang = dayTime * Math.PI * 2, sy = Math.sin(ang);
+  sunDirTmp.set(Math.cos(ang), sy, 0.35).normalize();
+  const dayF = THREE.MathUtils.smoothstep(sy, -0.12, 0.25);        // 0=夜 1=昼
+  const tw = Math.max(0, 1 - Math.abs(sy) / 0.3) * 0.55;            // 朝焼け・夕焼けの強さ
+  skyTmp.copy(SKY_NIGHT).lerp(SKY_DAY, dayF).lerp(SKY_DUSK, tw);
+  scene.background.copy(skyTmp); scene.fog.color.copy(skyTmp);
+  lightUniforms.uSky.value = 0.12 + 0.88 * dayF;
+  // 太陽光（影）はプレイヤーに追従させ、夜は消す
+  sunLight.intensity = dayF;
+  sunLight.position.copy(player.pos).addScaledVector(sunDirTmp, 90);
+  sunLight.target.position.copy(player.pos); sunLight.target.updateMatrixWorld();
+  const cp = camera.position;
+  sunMesh.position.copy(cp).addScaledVector(sunDirTmp, 450); sunMesh.lookAt(cp);
+  moonMesh.position.copy(cp).addScaledVector(sunDirTmp, -450); moonMesh.lookAt(cp);
+  stars.position.copy(cp); stars.rotation.z = ang; starMat.opacity = Math.pow(1 - dayF, 2);
+  cloudDrift += dt * 1.5;
+  clouds.position.set(cp.x, 112, cp.z);
+  cloudTex.offset.set((cp.x - cloudDrift) / CLOUD_CELL, -cp.z / CLOUD_CELL);
+  cloudMat.color.setRGB(0.25 + 0.75 * dayF, 0.28 + 0.72 * dayF, 0.4 + 0.6 * dayF);
+  const hour = (6 + dayTime * 24) % 24;
+  clockEl.textContent = String(Math.floor(hour)).padStart(2, '0') + ':' + String(Math.floor((hour % 1) * 60)).padStart(2, '0');
+}
+updateDayNight(0);
+
+document.getElementById('mode-btn').addEventListener('click', () => {
+  startMode = startMode === 'survival' ? 'creative' : 'survival';
+  document.getElementById('mode-btn').textContent = 'ゲームモード：' + (startMode === 'creative' ? 'クリエイティブ' : 'サバイバル');
+});
 
 // ============================================================
 // 物理・衝突判定
@@ -1656,6 +3048,22 @@ const JUMP_SPEED = Math.sqrt(2 * Math.abs(GRAVITY) * 1.252); // ≈ 8.37 m/s
 const WALK_SPEED = 4.317;
 const RUN_SPEED = WALK_SPEED * 1.3;
 const RUN_SPEED_JUMP = 7.0; // ダッシュジャンプ時の水平速度（秒速ブロック）
+
+// ------ スニーク（Wiki「スニーク」節の記載に基づく） ------
+// ・強制/自主に関わらず発生する効果:
+//   - 目線の高さが約1/8ブロック下がる
+//   - 当たり判定の高さが1.8→1.5ブロックに縮み、低い空間を通れるようになる
+//   - 移動速度がおよそ毎秒1.31mに低下する（移動キー同時押しで斜めに進む場合は毎秒1.8mに向上）
+// ・自主的なスニーク中のみ発生する効果（このゲームでは主に）:
+//   - 段差上限(0.6ブロック)以上の高さから自主的に落ちなくなる（溶岩などへの落下防止）
+// ・高さ1.5〜1.8ブロックの空間にいる間は、自主的な操作の有無に関わらず強制的にスニーク状態になる
+const NORMAL_PLAYER_HEIGHT = 1.7;
+const SNEAK_PLAYER_HEIGHT = NORMAL_PLAYER_HEIGHT * (1.5 / 1.8); // ≈1.417（1.8→1.5への縮小比率をそのまま適用）
+const EYE_OFFSET_NORMAL = 1.6;
+const EYE_OFFSET_SNEAK = EYE_OFFSET_NORMAL - 1 / 8; // 目線の高さが約1/8ブロック下がる
+const SNEAK_SPEED = 1.31;
+const SNEAK_SPEED_DIAGONAL = 1.8; // 斜め移動時は速度が向上する
+const SNEAK_EDGE_LIMIT = 0.6; // これ以上の段差からは自主的に落ちない（デフォルト値）
 
 function collidesAt(pos) {
   const r = player.radius;
@@ -1745,6 +3153,36 @@ function applyWaterFlowPush(dt) {
 // onGroundがtrue/falseを行き来してしまい、空中用の低加速モデルが
 // 一瞬だけ挟まって「氷の上のように滑る」体感になる原因だった。
 // そのため、毎フレーム「今まさに足元にブロックがあるか」を直接調べて判定する。
+// 指定した高さ(height)でプレイヤーがその場に直立した場合、頭上のブロックに衝突するかどうかを調べる。
+// 「通常の高さ(1.8ブロック相当)では衝突するが、スニーク時の高さ(1.5ブロック相当)なら衝突しない」
+// という空間にいる時は、Wiki記載の通り自主的な操作の有無に関わらず強制的にスニーク状態になる。
+function ceilingBlockedAt(pos, height) {
+  const r = player.radius;
+  const minX = Math.floor(pos.x - r), maxX = Math.floor(pos.x + r);
+  const minZ = Math.floor(pos.z - r), maxZ = Math.floor(pos.z + r);
+  const topY = Math.floor(pos.y + height);
+  for (let x = minX; x <= maxX; x++)
+    for (let z = minZ; z <= maxZ; z++)
+      if (isOpaque(getBlock(x, topY, z))) return true;
+  return false;
+}
+
+// 自主的にスニーク中、足元から指定した段差上限(SNEAK_EDGE_LIMIT)の範囲内に
+// 支えとなるブロックがあるかどうかを調べる。無ければ「その先は踏み外して落ちる」段差と判断し、
+// 移動をその場で止めることで、溶岩や崖などへ自主的に落下しないようにする。
+function hasEdgeSupport(x, y, z) {
+  const r = player.radius;
+  const minX = Math.floor(x - r), maxX = Math.floor(x + r);
+  const minZ = Math.floor(z - r), maxZ = Math.floor(z + r);
+  const highY = Math.floor(y - 0.001);
+  const lowY = Math.floor(y - SNEAK_EDGE_LIMIT - 0.001);
+  for (let bx = minX; bx <= maxX; bx++)
+    for (let bz = minZ; bz <= maxZ; bz++)
+      for (let by = highY; by >= lowY; by--)
+        if (isOpaque(getBlock(bx, by, bz))) return true;
+  return false;
+}
+
 function isStandingOnGround(pos) {
   const r = player.radius;
   const minX = Math.floor(pos.x - r), maxX = Math.floor(pos.x + r);
@@ -1756,11 +3194,42 @@ function isStandingOnGround(pos) {
   return false;
 }
 
+// ------ プレイヤーの水没状態を調べる ------
+// プレイヤーの体積（足元〜頭上のバウンディングボックス）のうち何割が水ブロックに
+// 浸かっているかを調べ、泳ぎの速度判定（静止水面を泳ぐ/一部だけ浸かっている）や
+// 浮力・上下移動の制御に使う。あわせて、触れている水が「流れ」（waterLevelが0より大きい
+// ＝水源ではない）かどうかも調べ、上向き/下向きの水流中の速度低下の近似に用いる。
+function getWaterImmersion(pos) {
+  const r = player.radius;
+  const minX = Math.floor(pos.x - r), maxX = Math.floor(pos.x + r);
+  const minZ = Math.floor(pos.z - r), maxZ = Math.floor(pos.z + r);
+  const minY = Math.floor(pos.y), maxY = Math.floor(pos.y + player.height);
+  let waterCells = 0, totalCells = 0, inFlowingWater = false;
+  for (let x = minX; x <= maxX; x++) {
+    for (let y = minY; y <= maxY; y++) {
+      for (let z = minZ; z <= maxZ; z++) {
+        totalCells++;
+        if (getBlock(x, y, z) === BLOCK.WATER) {
+          waterCells++;
+          const lvl = waterLevel.get(key(x, y, z));
+          if (lvl !== undefined && lvl > 0) inFlowingWater = true;
+        }
+      }
+    }
+  }
+  return {
+    inWater: waterCells > 0,
+    ratio: totalCells > 0 ? waterCells / totalCells : 0,
+    inFlowingWater,
+  };
+}
+
 // 移動の加速処理を正確に20tick/秒でシミュレートするためのアキュムレータ
 // （フレームレートに関わらず一定のtickレートを保つため）
 let moveTickAccumulator = 0;
 
 function updatePhysics(dt) {
+  if (player.dead) return;
   // フレームの最初に、足元の直下にブロックがあるかを明示的に判定して onGround を確定させる。
   // これにより「衝突検出のタイミングのズレでonGroundが1フレームだけfalseになる」問題を防ぎ、
   // 平地では常に安定して地上の加速モデルが使われるようにする。
@@ -1768,6 +3237,35 @@ function updatePhysics(dt) {
   if (player.vel.y <= 0) {
     player.onGround = isStandingOnGround(player.pos);
   }
+
+  // 落下ダメージ計算用に、空中にいる間の最高到達点を記録し続ける
+  // （着地した瞬間にこの高さと着地面の差から落下距離を求める）
+  if (!player.onGround) {
+    player.fallStartY = Math.max(player.fallStartY, player.pos.y);
+  }
+
+  // ------ スニーク状態の判定 ------
+  // 自主的なスニーク: Shiftキーを押している間だけ状態になる（切り替え型ではなく押し続け型）
+  // 強制スニーク: 高さ1.5〜1.8ブロックの空間（通常の高さでは頭がつかえるが、スニーク時の
+  //             縮んだ当たり判定なら通れる空間）にいる間は、入力の有無に関わらず強制される
+  const sneakInput = !!(keys['ShiftLeft'] || keys['ShiftRight']) && !player.flying;
+  const forcedSneak = !sneakInput
+    && ceilingBlockedAt(player.pos, NORMAL_PLAYER_HEIGHT)
+    && !ceilingBlockedAt(player.pos, SNEAK_PLAYER_HEIGHT);
+  const sneaking = sneakInput || forcedSneak;
+
+  // 強制/自主に関わらず発生する効果: 当たり判定の高さが1.8→1.5ブロック相当に縮む。
+  // 以降の衝突判定・水没判定はすべてこの縮んだ高さを使って行われる。
+  player.height = sneaking ? SNEAK_PLAYER_HEIGHT : NORMAL_PLAYER_HEIGHT;
+  // 目線の高さが約1/8ブロック下がる（カメラは滑らかに追従させる）
+  const targetEyeOffset = sneaking ? EYE_OFFSET_SNEAK : EYE_OFFSET_NORMAL;
+  player.eyeOffset += (targetEyeOffset - player.eyeOffset) * Math.min(1, dt * 12);
+
+  // 水没状態の判定（呼吸ゲージ計算にのみ使用。水中での移動・浮力は通常の陸上物理のまま）
+  const waterState = getWaterImmersion(player.pos);
+  const fullySubmerged = waterState.ratio >= 0.95;
+  player.underwater = fullySubmerged;
+  updateOxygen(dt, fullySubmerged);
 
   const forward = new THREE.Vector3(Math.sin(player.yaw), 0, Math.cos(player.yaw));
   const right = new THREE.Vector3(Math.sin(player.yaw+Math.PI/2), 0, Math.cos(player.yaw+Math.PI/2));
@@ -1787,7 +3285,14 @@ function updatePhysics(dt) {
 
   // Wキーが押されていない、または前進していない場合はダッシュを解除
   const movingForward = keys['KeyW'];
-  const sprintActive = isSprinting && movingForward;
+  // 空腹度が6以下ではダッシュできない（クリエイティブは無制限）
+  let sprintActive = isSprinting && movingForward && (gameMode === 'creative' || player.hunger > 6);
+
+  // スニーク中はダッシュできない
+  if (sneaking && sprintActive) {
+    isSprinting = false;
+    sprintActive = false;
+  }
 
   // ------------------------------------------------------------
   // Minecraft Java版に近い「加算＋摩擦減衰」ベースの移動モデル
@@ -1798,8 +3303,18 @@ function updatePhysics(dt) {
   // 定常状態の速度は accelPerTick / (1 - friction) になるので、
   // 「最終的にtargetSpeedへ収束する」ことを保証しつつ、地上は数tickで、
   // 空中はゆっくり（=加速力が弱い）収束するよう、accelとfrictionをそれぞれ設定する。
-  const speed = sprintActive ? RUN_SPEED : WALK_SPEED;
-  const targetSpeed = speed * diagonalBoost;
+  let speed;
+  let skipDiagonalBoost = false;
+  if (sneaking) {
+    // スニーク中は移動速度がおよそ毎秒1.31mに低下する。
+    // 移動キーを同時押しして斜めに進む場合は毎秒1.8мまで向上する（本家仕様通り、専用の値を使う）。
+    speed = diagonalInput ? SNEAK_SPEED_DIAGONAL : SNEAK_SPEED;
+    skipDiagonalBoost = true; // 上のdiagonalInput判定で既に斜め専用の値を選んでいるため、二重に補正しない
+  } else {
+    speed = sprintActive ? RUN_SPEED : WALK_SPEED;
+  }
+  let targetSpeed = skipDiagonalBoost ? speed : speed * diagonalBoost;
+  if (player.flying) targetSpeed = sprintActive ? 21.6 : 10.9;
 
   const GROUND_FRICTION = 0.546; // 地上の1tickあたりの摩擦係数（低いほど急停止・急加速）
   const AIR_FRICTION = 0.9092;   // 空中の1tickあたりの摩擦係数（高いほど収束がゆっくり）
@@ -1833,11 +3348,17 @@ function updatePhysics(dt) {
   camera.updateProjectionMatrix();
 
   // 重力
-  player.vel.y += GRAVITY * dt;
-  if (player.vel.y < -40) player.vel.y = -40;
+  if (player.flying) {
+    const up = (keys['Space'] ? 1 : 0) - ((keys['ShiftLeft'] || keys['ShiftRight']) ? 1 : 0);
+    player.vel.y += (up * (sprintActive ? 15 : 7.5) - player.vel.y) * Math.min(1, dt * 10);
+  } else {
+    player.vel.y += GRAVITY * dt;
+    if (player.vel.y < -40) player.vel.y = -40;
+  }
 
-  if (keys['Space'] && player.onGround) {
+  if (keys['Space'] && player.onGround && !player.flying) {
     player.vel.y = JUMP_SPEED;
+    addExhaustion(sprintActive ? 0.2 : 0.05);
     player.onGround = false;
 
     // ダッシュジャンプ: ダッシュ中にジャンプした瞬間、水平速度が一気に約7.0ブロック/秒まで引き上がる
@@ -1850,13 +3371,19 @@ function updatePhysics(dt) {
   // 水流による押し流し（触れている水ブロックがあれば、その流れの向きに秒速1.39mで押される）
   applyWaterFlowPush(dt);
 
+  // 自主的なスニーク中は、段差上限(0.6ブロック)を超える高さから自ら落下しない
+  // （強制スニーク中はこの効果は発揮されないため対象外）。
+  const edgeProtect = sneakInput && !forcedSneak && player.onGround;
+
   // X移動
   let newPos = player.pos.clone();
   newPos.x += player.vel.x * dt;
   if (collidesAt(newPos)) newPos.x = player.pos.x;
+  else if (edgeProtect && !hasEdgeSupport(newPos.x, player.pos.y, player.pos.z)) newPos.x = player.pos.x;
   // Z移動
   newPos.z += player.vel.z * dt;
   if (collidesAt(newPos)) newPos.z = player.pos.z;
+  else if (edgeProtect && !hasEdgeSupport(newPos.x, player.pos.y, newPos.z)) newPos.z = player.pos.z;
   // Y移動
   newPos.y += player.vel.y * dt;
   if (collidesAt(newPos)) {
@@ -1889,6 +3416,17 @@ function updatePhysics(dt) {
         newPos.y = player.pos.y;
       }
       player.onGround = true;
+      player.flying = false; // 着地すると飛行解除
+
+      // ------ 落下ダメージ ------
+      // 3ブロックを超えて落下した場合、超えた分1ブロックにつき1のダメージ（=0.5ハート）を受ける。
+      // 水に着水した場合はダメージを受けない（本家仕様通り）。
+      const fallDistance = player.fallStartY - newPos.y;
+      if (!waterState.inWater && fallDistance > 3) {
+        const fallDamage = Math.floor(fallDistance - 3);
+        if (fallDamage > 0) applyDamage(fallDamage, '地面に激突して死んでしまった');
+      }
+      player.fallStartY = newPos.y; // 着地したので基準をリセット
     } else {
       newPos.y = player.pos.y;
     }
@@ -1897,7 +3435,9 @@ function updatePhysics(dt) {
     player.onGround = false;
   }
 
+  if (sprintActive) addExhaustion(0.1 * Math.hypot(newPos.x - player.pos.x, newPos.z - player.pos.z));
   player.pos.copy(newPos);
+  tickHunger(dt);
 
   // ワールド外に落ちないようにリスポーン（ブロックに埋まらない安全な高さを探す）
   if (player.pos.y < -10) {
@@ -1910,6 +3450,8 @@ function updatePhysics(dt) {
   camera.rotation.order = 'YXZ';
   camera.rotation.y = player.yaw;
   camera.rotation.x = player.pitch;
+
+  renderVitals();
 }
 
 // ============================================================
@@ -1967,6 +3509,26 @@ function animate() {
     // プレイヤーの現在位置に応じてチャンクの生成/破棄を予約する（境界を跨いだ時のみ実処理が走る）
     updateChunks(player.pos.x, player.pos.z, false);
   }
+
+  // ------ 死亡演出 ------
+  // Wiki「プレイヤーへの影響」節の記載通り、死亡時はカメラの視点が倒れるように傾き、
+  // 震え、わずかにズームインする。
+  if (player.dead) {
+    player.deathElapsed += dt;
+    const t = Math.min(1, player.deathElapsed / 1.0);
+    camera.rotation.z = t * 0.35; // 倒れるように傾く
+    const targetFOV = BASE_FOV * 0.93; // わずかにズームイン
+    camera.fov += (targetFOV - camera.fov) * Math.min(1, dt * 4);
+    camera.updateProjectionMatrix();
+    // 震え（減衰させず、死亡演出中はずっと小刻みに揺れ続ける）
+    const shake = 0.025;
+    camera.position.set(
+      player.deathCameraBase.x + (Math.random() - 0.5) * shake,
+      player.deathCameraBase.y + (Math.random() - 0.5) * shake,
+      player.deathCameraBase.z + (Math.random() - 0.5) * shake
+    );
+  }
+
   // キューにあるチャンクを少数ずつ処理する（フレームが止まらないよう常に呼ぶ）
   processChunkQueues();
 
@@ -1989,6 +3551,10 @@ function animate() {
   updateChunkFrustumCulling();
 
   // 一人称視点の腕（振りアニメーション）を更新
+  updateMining(dt);
+  updateEating(dt);
+  updateItemEntities(dt);
+  updateDayNight(dt);
   updateArmSwing(dt);
 
   // 水の流動シミュレーション: 待機中の広がりタスクのうち、時間が来たものを処理する
