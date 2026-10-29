@@ -26,6 +26,9 @@
   }
   #crosshair::before { width: 2px; height: 20px; left: 9px; top: 0; }
   #crosshair::after { width: 20px; height: 2px; top: 9px; left: 0; }
+  /* 攻撃クールダウン表示（本家の攻撃インジケーター。チャージ完了で消える） */
+  #atk-ind { position: absolute; left: 50%; top: 30px; width: 30px; height: 4px; margin-left: -15px; background: rgba(0,0,0,0.55); border: 1px solid rgba(255,255,255,0.6); box-sizing: border-box; display: none; }
+  #atk-ind i { display: block; height: 100%; width: 0; background: rgba(255,255,255,0.9); }
 
   /* Hotbar */
   #hotbar {
@@ -33,6 +36,12 @@
     display: flex; gap: 4px; z-index: 10;
     background: rgba(0,0,0,0.25);
     padding: 6px; border-radius: 6px;
+  }
+  /* オフハンド枠（本家同様、ホットバーの左隣に表示。空のときは非表示） */
+  #offhand-hud {
+    position: fixed; bottom: 18px; left: calc(50% - 256px - 72px);
+    display: none; z-index: 10;
+    background: rgba(0,0,0,0.25); padding: 6px; border-radius: 6px;
   }
   .slot {
     width: 52px; height: 52px; border: 2px solid rgba(255,255,255,0.4);
@@ -211,9 +220,16 @@
     background: rgba(0,0,0,0.25); padding: 8px 12px; border-radius: 6px;
     line-height: 1.6;
   }
+  #hud-debug-right {
+    position: fixed; top: 12px; right: 12px; z-index: 10; max-width: 46vw;
+    color: #fff; font-size: 12px; text-shadow: 0 0 4px #000, 0 0 4px #000;
+    background: rgba(0,0,0,0.25); padding: 8px 12px; border-radius: 6px;
+    line-height: 1.6; text-align: right; word-break: break-all;
+  }
+  body:not(.debug) #hud-top, body:not(.debug) #hud-debug-right { display: none; } /* F3でデバッグ画面を切替（標準は非表示） */
 
-  body.intitle #hud-top, body.intitle #vitals-bar, body.intitle #hotbar, body.intitle #crosshair, body.intitle #current-seed-display, body.intitle #pause-hint, body.intitle #item-name-display { display: none !important; }
-  body.nohud #hud-top, body.nohud #vitals-bar, body.nohud #hotbar, body.nohud #crosshair, body.nohud #current-seed-display, body.nohud #pause-hint, body.nohud #item-name-display { display: none !important; }
+  body.intitle #hud-top, body.intitle #hud-debug-right, body.intitle #vitals-bar, body.intitle #hotbar, body.intitle #offhand-hud, body.intitle #crosshair, body.intitle #current-seed-display, body.intitle #pause-hint, body.intitle #item-name-display { display: none !important; }
+  body.nohud #hud-top, body.nohud #hud-debug-right, body.nohud #vitals-bar, body.nohud #hotbar, body.nohud #offhand-hud, body.nohud #crosshair, body.nohud #current-seed-display, body.nohud #pause-hint, body.nohud #item-name-display { display: none !important; }
   #pause-hint {
     position: fixed; bottom: 12px; right: 14px; z-index: 10;
     color: #fff; font-size: 12px; text-shadow: 0 0 3px #000;
@@ -235,6 +251,23 @@
     opacity: 0; transition: opacity 0.2s ease-out;
   }
   #underwater-overlay.show { opacity: 1; }
+
+  /* 溶岩の中（目が溶岩に浸かっている間）の赤橙のオーバーレイ */
+  #lava-overlay {
+    position: fixed; inset: 0; z-index: 5; pointer-events: none;
+    background: rgba(214, 78, 6, 0.82);
+    opacity: 0; transition: opacity 0.1s ease-out;
+  }
+  #lava-overlay.show { opacity: 1; }
+
+  /* 燃えている間（溶岩から出た後など）の、画面の下からのオレンジ色の炎 */
+  #fire-overlay {
+    position: fixed; left: 0; right: 0; bottom: 0; height: 48%; z-index: 5; pointer-events: none;
+    background: linear-gradient(to top, rgba(255,110,0,0.7) 0%, rgba(255,190,20,0.3) 55%, rgba(255,200,40,0) 100%);
+    opacity: 0; transition: opacity 0.15s ease-out;
+  }
+  #fire-overlay.show { opacity: 1; animation: fire-flicker 0.25s infinite alternate; }
+  @keyframes fire-flicker { from { filter: brightness(1); } to { filter: brightness(1.25); } }
 
   /* 死亡時の赤いビネット（死亡演出中、常時じわじわ濃くなる） */
   #death-vignette {
@@ -441,13 +474,20 @@
 <body>
 
 <div id="canvas-container"></div>
-<div id="crosshair"></div>
+<div id="crosshair"><div id="atk-ind"><i></i></div></div>
 <div id="damage-flash"></div>
 <div id="underwater-overlay"></div>
+<div id="lava-overlay"></div>
+<div id="fire-overlay"></div>
 <div id="death-vignette"></div>
 
 <div id="hud-top">
   座標: <span id="coords">0, 0, 0</span><br>
+  ブロック: <span id="block-pos">--</span><br>
+  チャンク内座標: <span id="chunk-pos">--</span><br>
+  向き: <span id="facing">--</span><br>
+  バイオーム: <span id="biome-info">--</span>　日数: <span id="day-info">0</span><br>
+  見ているブロック: <span id="target-info">なし</span><br>
   FPS: <span id="fps">--</span><br>
   時刻: <span id="clock">--:--</span><br>
   明るさ: <span id="light-info">--</span><br>
@@ -455,6 +495,15 @@
   読み込み済みチャンク: <span id="chunk-count">--</span><br>
   視界内チャンク: <span id="visible-chunk-count">--</span>（フラスタムカリング後）<br>
   読み込みキュー: <span id="queue-count">--</span>
+</div>
+
+<div id="hud-debug-right">
+  ターゲットブロック: <span id="dbg-block">なし</span><br>
+  面: <span id="dbg-face">--</span>　距離: <span id="dbg-dist">--</span><br>
+  メモリ: <span id="dbg-mem">--</span><br>
+  ディスプレイ: <span id="dbg-display">--</span><br>
+  GPU: <span id="dbg-gpu">--</span><br>
+  ヘルプ: F3+G ゲームモード / F3+T 時間を進める / F3+Y 時間停止 / F3+H 詳細ツールチップ / F3+B 当たり判定
 </div>
 
 <div id="item-name-display"></div>
@@ -467,6 +516,7 @@
   </div>
 </div>
 <div id="hotbar"></div>
+<div id="offhand-hud"></div>
 <div id="pause-hint">ESC でカーソル解除 / クリックで再開</div>
 <div id="current-seed-display">シード: <span id="seed-display-value">--</span></div>
 
@@ -511,7 +561,7 @@
     <b>E</b>：インベントリ開閉　　<b>Q</b>：アイテムを捨てる（Ctrl+Qで全部）　　<b>1〜9 or マウスホイール</b>：ブロック選択　　<b>中クリック</b>：ブロックを選ぶ　　<b>W連打（ダブルタップ）</b>：ダッシュ<br>
     <b>ダッシュ中にジャンプ</b>：ダッシュジャンプでさらに加速<br>
     <b>左クリック長押し</b>：ブロックを掘る（硬さ・道具で時間が変わる）　<b>右クリック長押し</b>：食べる<br>
-    <b>F1</b>：HUD非表示　<b>F2</b>：スクリーンショット　<b>F3+G</b>：ゲームモード切替　<b>F3+T</b>：時間を進める　<b>F3+Y</b>：時間停止　<b>クリエイティブ</b>：スペース2回連打で飛行<br>
+    <b>F1</b>：HUD非表示　<b>F2</b>：スクリーンショット　<b>F3</b>：デバッグ画面　<b>F3+G</b>：ゲームモード切替　<b>F3+T</b>：時間を進める　<b>F3+Y</b>：時間停止　<b>F3+B</b>：当たり判定表示　<b>クリエイティブ</b>：スペース2回連打で飛行<br>
     木→板材→棒→ツルハシ／斧／シャベルをクラフト。石は<b>ツルハシ</b>で壊さないと何も落ちません<br>
     左クリック（Mobに向けて） ：攻撃（剣＞斧＞ツルハシ＞素手）。夜と洞窟に<b>ゾンビ</b>、草原に<b>牛</b>が出現。生の牛肉は<b>かまど</b>でステーキに（剣は作業台で 板材/丸石/鉄/ダイヤ2個＋棒）<br>
     <b>ESC</b>：ポーズメニュー（保存してタイトルへ）　30秒ごとに自動保存されます<br>
@@ -601,6 +651,10 @@ const BLOCK = {
   BIRCH_WOOD: 37, BIRCH_LEAVES: 38, SPRUCE_WOOD: 39, SPRUCE_LEAVES: 40,
   OAK_SAPLING: 41, BIRCH_SAPLING: 42, SPRUCE_SAPLING: 43,
   COAL_BLOCK: 44, IRON_BLOCK: 45, GOLD_BLOCK: 46, DIAMOND_BLOCK: 47, STONE_BRICKS: 48, SMOOTH_STONE: 49,
+  LAVA: 50,
+  LAPIS_ORE: 51, REDSTONE_ORE: 52, COPPER_ORE: 53,
+  GRANITE: 54, DIORITE: 55, ANDESITE: 56,
+  CHEST: 57,
 };
 const CHUNK_SIZE = 16;
 const CH = 256;                       // チャンクの高さ（Y=0〜255）
@@ -632,6 +686,7 @@ defineBlock(BLOCK.BIRCH_LEAVES, BF.SOLID | BF.CUBE | BF.SKY_BLOCK);
 defineBlock(BLOCK.SPRUCE_LEAVES, BF.SOLID | BF.CUBE | BF.SKY_BLOCK);
 defineBlock(BLOCK.LEAVES, BF.SOLID | BF.CUBE | BF.SKY_BLOCK);  // 光は通すが日光は散乱させる。面は隠さない
 defineBlock(BLOCK.WATER, BF.FLUID | BF.SKY_BLOCK);
+defineBlock(BLOCK.LAVA, BF.FLUID | BF.SKY_BLOCK);   // 溶岩: 水と同じ流体。光は通す（自身が明るさ15の光源）
 defineBlock(BLOCK.TORCH, 0);                                   // 当たり判定なし・別メッシュで描画
 for (const id of [BLOCK.TALL_GRASS, BLOCK.DANDELION, BLOCK.POPPY, BLOCK.OAK_SAPLING, BLOCK.BIRCH_SAPLING, BLOCK.SPRUCE_SAPLING]) defineBlock(id, BF.CROSS); // 草・花
 defineBlock(BLOCK.DEAD_BUSH, BF.CROSS);                            // 枯れ木: 当たり判定なし・遮光なし・十字形メッシュ
@@ -666,6 +721,9 @@ function registerFluid(id, def) {
 function fluidModId(id, lv) { return lv === 0 ? id : (FLUID_MOD_BASE | (id << 4) | lv); }
 function fluidFromMod(mid) { return { id: (mid & 0x7FFF) >> 4, lv: mid & 15 }; }
 registerFluid(BLOCK.WATER, { infiniteSource: true, color: 0x4fa8e0, opacity: 0.5 });
+// 溶岩（本家のオーバーワールド準拠）: 水平に3ブロックまで、1ブロック1.5秒でゆっくり広がる。下り探索は2ブロック。無限水源にはならない
+registerFluid(BLOCK.LAVA, { maxSpread: 3, heights: [1, 6 / 9, 4 / 9, 2 / 9], // Java版: オーバーワールドの溶岩の流れはレベル2・4・6のみ（高さ=(8-レベル)/9）
+ secondsPerBlock: 1.5, downhillSearch: 2, color: 0xe2530f, opacity: 1, emissive: true });
 function lightCurve(l) { return l <= 0 ? 0 : Math.pow(0.8, 15 - l); }
 // 光の遮蔽（wiki「明るさ」の「遮蔽」節）
 //   lightOpaque : 光を一切通さないブロック（葉は光を通すので含まない）
@@ -685,7 +743,104 @@ function mulberry32(seed) {
 
 // ------ シード・ノイズ ------
 let worldSeed = 0, seedOffsetX = 0, seedOffsetZ = 0;
-function setSeed(ws, ox, oz) { worldSeed = ws; seedOffsetX = ox; seedOffsetZ = oz; }
+const carverCache = new Map(); // "cx,cz" -> そのチャンクのカーバー洞窟マスク（最近使った48チャンクぶんだけ保持）
+function setSeed(ws, ox, oz) { worldSeed = ws; seedOffsetX = ox; seedOffsetZ = oz; carverCache.clear(); }
+
+// ------------------------------------------------------------
+// カーバー洞窟（本家Wiki「Cave」の carver cave）: 蛇のように曲がる長いトンネルと、楕円形の大部屋
+//  ・チャンクごとに乱数で「洞窟の始点」を決め、始点から約85〜112ブロック続くトンネルを掘る
+//  ・4分の1の確率で主部屋（楕円体の空洞）ができ、1〜4本のトンネルがつながる。トンネルは両端が細く中央が太く、
+//    幹は途中で2本の枝に分かれる。天井は丸く、床は平ら（楕円体の下側を掘らない）
+//  ・近隣チャンク（最大8チャンク先）の洞窟のうち、このチャンクに届く部分だけをマスクに書く。どのチャンクから
+//    生成しても同じ形になる（シードと座標だけで決まる）。地表を突き抜けた所が自然な入口になる
+// ------------------------------------------------------------
+const CARVER_RANGE = 8;        // 近隣チャンクの探索半径（トンネル長の最大112ブロック=7チャンクぶんをカバー）
+const CARVER_CHUNK_ODDS = 7;   // 洞窟を持つチャンクは 1/7（本家と同じ）
+const CARVER_LOW_Y = 26;       // 洞窟の始点の高さの下限（この世界の岩盤は最大でもY30付近）
+const CARVER_Y_SPAN = 90;      // 始点の高さの幅（低いほど出やすい偏りつき）
+const CAVE_LAVA_DEPTH = 7;     // 岩盤の上この高さまでの洞窟の空間は溶岩で満たす（本家の最深部の溶岩だまり）
+function carveTunnel(m, cx, cz, seed, px, py, pz, scale, yaw, pitch, idx, length, vert) {
+  const rng = mulberry32(seed);
+  const ccx = cx * 16 + 8, ccz = cz * 16 + 8; // 掘る対象チャンクの中心
+  if (length <= 0) { const max = CARVER_RANGE * 16 - 16; length = max - Math.floor(rng() * (max >> 2)); } // 85〜112
+  let main = false;
+  if (idx === -1) { idx = length >> 1; main = true; } // 主部屋は長さの途中（=最も太い所）から始める
+  const split = Math.floor(rng() * (length >> 1)) + (length >> 2);
+  const steep = Math.floor(rng() * 6) === 0;
+  let yawC = 0, pitC = 0;
+  for (; idx < length; idx++) {
+    const width = 1.5 + Math.sin(idx * Math.PI / length) * scale; // 両端が細く、中央が太い
+    const height = width * vert;
+    const cp = Math.cos(pitch), sp = Math.sin(pitch);
+    px += Math.cos(yaw) * cp; py += sp; pz += Math.sin(yaw) * cp;
+    pitch *= steep ? 0.92 : 0.7;
+    pitch += pitC * 0.1; yaw += yawC * 0.1;
+    pitC *= 0.9; yawC *= 0.75;
+    pitC += (rng() - rng()) * rng() * 2;
+    yawC += (rng() - rng()) * rng() * 4;
+    if (!main && idx === split && scale > 1 && length > 0) { // 幹が途中で2本の枝に分かれる
+      const s1 = Math.floor(rng() * 4294967296) >>> 0, c1 = rng() * 0.5 + 0.5;
+      carveTunnel(m, cx, cz, s1, px, py, pz, c1, yaw - Math.PI / 2, pitch / 3, idx, length, 1);
+      const s2 = Math.floor(rng() * 4294967296) >>> 0, c2 = rng() * 0.5 + 0.5;
+      carveTunnel(m, cx, cz, s2, px, py, pz, c2, yaw + Math.PI / 2, pitch / 3, idx, length, 1);
+      return;
+    }
+    if (!main && Math.floor(rng() * 4) === 0) continue; // ときどき掘らない（トンネルが途切れて泡が連なる形になる）
+    const dx = px - ccx, dz = pz - ccz, remain = length - idx, maxD = scale + 2 + 16;
+    if (dx * dx + dz * dz - remain * remain > maxD * maxD) return; // 残りの長さでもこのチャンクへ届かない
+    if (px < ccx - 16 - width * 2 || pz < ccz - 16 - width * 2 || px > ccx + 16 + width * 2 || pz > ccz + 16 + width * 2) continue;
+    let x0 = Math.floor(px - width) - cx * 16 - 1, x1 = Math.floor(px + width) - cx * 16 + 1;
+    let z0 = Math.floor(pz - width) - cz * 16 - 1, z1 = Math.floor(pz + width) - cz * 16 + 1;
+    let y0 = Math.floor(py - height) - 1, y1 = Math.floor(py + height) + 1;
+    if (x0 < 0) x0 = 0; if (x1 > 16) x1 = 16; if (z0 < 0) z0 = 0; if (z1 > 16) z1 = 16;
+    if (y0 < 1) y0 = 1; if (y1 > CH - 8) y1 = CH - 8;
+    for (let x = x0; x < x1; x++) {
+      const xd = (cx * 16 + x + 0.5 - px) / width;
+      for (let z = z0; z < z1; z++) {
+        const zd = (cz * 16 + z + 0.5 - pz) / width;
+        if (xd * xd + zd * zd >= 1) continue;
+        for (let y = y1 - 1; y >= y0; y--) {
+          const yd = (y + 0.5 - py) / height;
+          if (yd > -0.7 && xd * xd + yd * yd + zd * zd < 1) m[(y << 8) | (z << 4) | x] = 1; // yd>-0.7: 下側を掘らず床が平らになる
+        }
+      }
+    }
+  }
+}
+// 近隣チャンク(ncx,ncz)が持つ洞窟のうち、チャンク(cx,cz)に届く部分をマスクmに書き込む
+function carveFrom(m, cx, cz, ncx, ncz) {
+  const rng = mulberry32((worldSeed ^ Math.imul(ncx, 0x1B873593) ^ Math.imul(ncz, 0xCC9E2D51) ^ 0x5EED5EED) >>> 0);
+  const ni = n => Math.floor(rng() * n);
+  let caves = ni(ni(ni(15) + 1) + 1);
+  if (ni(CARVER_CHUNK_ODDS) !== 0) caves = 0;
+  for (let i = 0; i < caves; i++) {
+    const x = ncx * 16 + ni(16), y = CARVER_LOW_Y + ni(ni(CARVER_Y_SPAN) + 8), z = ncz * 16 + ni(16);
+    let tunnels = 1;
+    if (ni(4) === 0) { // 主部屋: 楕円体の大きな空洞（高さは幅の半分）。1〜4本のトンネルがつながる
+      carveTunnel(m, cx, cz, Math.floor(rng() * 4294967296) >>> 0, x, y, z, 1 + rng() * 6, 0, 0, -1, -1, 0.5);
+      tunnels += ni(4);
+    }
+    for (let j = 0; j < tunnels; j++) {
+      const yaw = rng() * Math.PI * 2, pitch = (rng() - 0.5) * 2 / 8;
+      let scale = rng() * 2 + rng();
+      if (ni(10) === 0) scale *= rng() * rng() * 3 + 1; // ときどき特に太いトンネル
+      carveTunnel(m, cx, cz, Math.floor(rng() * 4294967296) >>> 0, x, y, z, scale, yaw, pitch, 0, 0, 1);
+    }
+  }
+}
+// チャンク(cx,cz)のカーバー洞窟マスク（セル番号 = (y<<8)|(lz<<4)|lx、1=洞窟）。計算は重めなのでキャッシュする
+function carverMaskOf(cx, cz) {
+  const key = cx + ',' + cz;
+  let m = carverCache.get(key);
+  if (m) { carverCache.delete(key); carverCache.set(key, m); return m; }
+  m = new Uint8Array(LAYER * CH);
+  for (let ncx = cx - CARVER_RANGE; ncx <= cx + CARVER_RANGE; ncx++)
+    for (let ncz = cz - CARVER_RANGE; ncz <= cz + CARVER_RANGE; ncz++) carveFrom(m, cx, cz, ncx, ncz);
+  carverCache.set(key, m);
+  if (carverCache.size > 48) carverCache.delete(carverCache.keys().next().value);
+  return m;
+}
+function carverHas(x, y, z) { return carverMaskOf(x >> 4, z >> 4)[(y << 8) | ((z & 15) << 4) | (x & 15)] !== 0; }
 function hashNoise(x, y) {
   x += seedOffsetX; y += seedOffsetZ;
   let n = x * 374761393 + y * 668265263 + worldSeed * 2654435761;
@@ -820,16 +975,69 @@ function noise3(x, y, z) {
     l(l(hash3(x0, y0, z0 + 1), hash3(x0 + 1, y0, z0 + 1), fx), l(hash3(x0, y0 + 1, z0 + 1), hash3(x0 + 1, y0 + 1, z0 + 1), fx), fy),
     fz);
 }
-const CAVE_TUNNEL_WIDTH = 0.03;
-const CAVE_CAVERN_THRESHOLD = 0.8;
+const CAVE_TUNNEL_WIDTH = 0.052;       // 通路の太さ（旧0.03）。大きいほど太い
+const CAVE_ENTRANCE_BOOST = 1.4;       // 地表（深さ0）での太さの倍率。入口を大きく開けるため
+const CAVE_ENTRANCE_DEPTH = 12;        // 倍率が1まで滑らかに戻る深さ（段差ができないよう線形に補間）
+// ------------------------------------------------------------
+// ノイズ洞窟（本家Wiki「Cave」の noise cave）: 3種類を重ねる
+//   ・スパゲッティ洞窟: 2枚の3Dノイズの等値面が交わる所にできる、長く細くうねるトンネル。太さは低周波ノイズで場所ごとに変わる
+//   ・ヌードル洞窟    : さらに細く曲がりくねった1〜3ブロック幅のトンネル。深い層（CAVE_NOODLE_MAX_Y 未満）だけに出る
+//   ・チーズ洞窟      : 大きな空洞。穴あきチーズのように点在し、床から天井まで届く石柱（ノイズ柱）が立つ。深いほど出やすい
+// ------------------------------------------------------------
+const CAVE_SPAGHETTI_MAX_W = 0.12;     // スパゲッティの太さの上限（ノイズ評価を早く打ち切るための値）
+const CAVE_NOODLE_MAX_Y = 44;          // ヌードル洞窟が出る高さの上限（本家はY=30以下＝下層だけ）
+const CAVE_NOODLE_WIDTH = 0.028;       // ヌードル洞窟の太さ
+const CAVE_CHEESE_THRESHOLD = 0.67;   // チーズ洞窟のしきい値。小さいほど空洞が増える
+const CAVE_CHEESE_MIN_DEPTH = 8;       // チーズ洞窟は地表からこの深さより下にだけできる（地表を崩さない）
+const CAVE_PILLAR_THRESHOLD = 0.6;     // 石柱ノイズがこれを超えると空洞の中でも石が残る（小さいほど柱が多い）
 function isCaveAt(x, y, z, depth) {
+  const nearSurface = depth < CAVE_ENTRANCE_DEPTH ? 1 - Math.max(0, depth) / CAVE_ENTRANCE_DEPTH : 0;
+  // スパゲッティ洞窟
   const a = noise3(x * 0.045, y * 0.06, z * 0.045) - 0.5;
-  if (Math.abs(a) < CAVE_TUNNEL_WIDTH) {
-    const b = noise3(x * 0.045 + 53.7, y * 0.06 + 19.1, z * 0.045 + 81.3) - 0.5;
-    if (Math.abs(b) < CAVE_TUNNEL_WIDTH) return true;
+  if (Math.abs(a) < CAVE_SPAGHETTI_MAX_W) {
+    const thick = noise3(x * 0.011 + 101.7, y * 0.018 + 3.3, z * 0.011 - 77.3); // 太さのゆらぎ（0〜1）
+    const w = CAVE_TUNNEL_WIDTH * (0.45 + 1.1 * thick) * (1 + (CAVE_ENTRANCE_BOOST - 1) * nearSurface);
+    if (Math.abs(a) < w) {
+      const b = noise3(x * 0.045 + 53.7, y * 0.06 + 19.1, z * 0.045 + 81.3) - 0.5;
+      if (Math.abs(b) < w) return true;
+    }
   }
-  return depth > 6 && noise3(x * 0.022 + 11.3, y * 0.035 + 7.7, z * 0.022 + 29.1) > CAVE_CAVERN_THRESHOLD;
+  // ヌードル洞窟（下層だけ・地表近くには出ない）
+  if (y < CAVE_NOODLE_MAX_Y && depth > 5) {
+    const n1 = noise3(x * 0.07 + 211.3, y * 0.09 + 17.9, z * 0.07 - 143.1) - 0.5;
+    if (Math.abs(n1) < CAVE_NOODLE_WIDTH) {
+      const n2 = noise3(x * 0.07 - 97.7, y * 0.09 + 59.3, z * 0.07 + 301.9) - 0.5;
+      if (Math.abs(n2) < CAVE_NOODLE_WIDTH) return true;
+    }
+  }
+  // チーズ洞窟（深いほど・地表から離れるほど出やすい）＋ノイズ柱
+  if (depth > CAVE_CHEESE_MIN_DEPTH) {
+    const thr = CAVE_CHEESE_THRESHOLD + Math.max(0, 22 - depth) * 0.006 - 0.04 * Math.max(0, Math.min(1, (50 - y) / 24));
+    if (noise3(x * 0.02 + 11.3, y * 0.032 + 7.7, z * 0.02 + 29.1) > thr) {
+      return noise3(x * 0.065 + 500.5, y * 0.012 + 9.1, z * 0.065 - 500.5) < CAVE_PILLAR_THRESHOLD; // 縦に長い柱ノイズ
+    }
+  }
+  return false;
 }
+// ------------------------------------------------------------
+// 地下水脈（アクイファー）: 洞窟の空間を、区画ごとに決まった水位まで水（深層では溶岩）で満たす。
+//   ・区画（水平24×高さ12ブロック）ごとに「水で満たす / 溶岩で満たす / 空気のまま」を乱数で決め、水位も区画ごとに違う
+//     → 海面とは無関係な高さの地底湖ができる（本家のアクイファー）
+//   ・地表に近い所（AQUIFER_MIN_DEPTH 未満）には作らない。溶岩はY=AQUIFER_LAVA_MAX_Y以下の深層だけ
+// ------------------------------------------------------------
+const AQUIFER_CELL_XZ = 24, AQUIFER_CELL_Y = 12;
+const AQUIFER_WATER_ODDS = 0.26, AQUIFER_LAVA_ODDS = 0.08;
+const AQUIFER_MIN_DEPTH = 6, AQUIFER_LAVA_MAX_Y = 40;
+function aquiferFluid(x, y, z) { // 水ブロック/溶岩ブロックのID、満たさなければ 0
+  const gx = Math.floor(x / AQUIFER_CELL_XZ), gy = Math.floor(y / AQUIFER_CELL_Y), gz = Math.floor(z / AQUIFER_CELL_XZ);
+  const r = hash3(gx * 7 + 13, gy * 11 - 5, gz * 5 + 29);
+  const isLava = r < AQUIFER_LAVA_ODDS && gy * AQUIFER_CELL_Y < AQUIFER_LAVA_MAX_Y;
+  if (!isLava && (r < AQUIFER_LAVA_ODDS || r >= AQUIFER_LAVA_ODDS + AQUIFER_WATER_ODDS)) return 0;
+  const level = gy * AQUIFER_CELL_Y + Math.floor(hash3(gx + 101, gy + 57, gz - 33) * AQUIFER_CELL_Y); // この区画の水位（Y）
+  return y <= level ? (isLava ? BLOCK.LAVA : BLOCK.WATER) : 0;
+}
+const STRATA_BLOB_FREQ = 0.045, STRATA_GRANITE_MIN = 0.76, STRATA_DIORITE_MAX = 0.24, STRATA_ANDESITE_MIN = 0.77; // 花崗岩・閃緑岩・安山岩の大きな塊
+const STRATA_FREQ = 0.11, STRATA_GRAVEL_MIN = 0.80, STRATA_DIRT_MAX = 0.19; // 砂利・土ポケットの細かさと出現しきい値
 const ORE_DEFS = [
   [BLOCK.COAL_ORE, 14, 6, 26, 68],
   [BLOCK.IRON_ORE, 9, 4, 26, 58],
@@ -837,6 +1045,9 @@ const ORE_DEFS = [
   [BLOCK.DIAMOND_ORE, 2, 3, 26, 36],
   [BLOCK.COAL_ORE, 20, 8, 64, 150], // 高所（山）の石炭・鉄。既存の鉱石の乱数列は変えないよう末尾に足す
   [BLOCK.IRON_ORE, 10, 5, 64, 140],
+  [BLOCK.LAPIS_ORE, 2, 5, 26, 50],     // ラピスラズリ: 中層に少なめ
+  [BLOCK.REDSTONE_ORE, 6, 5, 26, 38],  // レッドストーン: 深層に多め（ダイヤと同じ深さ帯）
+  [BLOCK.COPPER_ORE, 8, 8, 30, 96],    // 銅: 広い高さにやや大きめの鉱脈
 ];
 
 // 木が生える地表か（= その柱の最上段が草ブロックになるか）。隣のチャンクの木の判定にも使うため、
@@ -848,6 +1059,7 @@ function isGrassSurface(x, z, h) {
   if (h >= SEA_LEVEL - 3 && h <= SEA_LEVEL + 1) return false; // 浜辺は砂
   const fillBottom = fillBottomOf(h);
   if (h > fillBottom + 3 && isCaveAt(x, h, z, 0)) return false; // 洞窟の入口で草が消えている
+  if (carverHas(x, h, z)) return false; // カーバー洞窟が地表を突き抜けた所（木の幹が浮かないように）
   return true;
 }
 
@@ -859,6 +1071,7 @@ function isGrassSurface(x, z, h) {
 function generateChunkData(cx, cz, mods) {
   const startX = cx * CHUNK_SIZE, startZ = cz * CHUNK_SIZE;
   const blocks = new Uint16Array(LAYER * CH);
+  const carved = carverMaskOf(cx, cz), genLava = []; // カーバー洞窟のマスクと、洞窟の底の溶岩の座標（光源登録用）
   let wl = null; // 水ブロックの「重み+1」（0 = 水ではない/データなし）
   const BEACH_MIN_Y = SEA_LEVEL - 3, BEACH_MAX_Y = SEA_LEVEL + 1;
 
@@ -883,7 +1096,25 @@ function generateChunkData(cx, cz, mods) {
         if (h < SEA_LEVEL) b = BLOCK.SAND;
         else if (isBeach && y > h - 3) b = BLOCK.SAND;
         if (y === fillBottom) b = BLOCK.BEDROCK;
-        else if (y > fillBottom + 3 && y <= (h < SEA_LEVEL ? h - 3 : h) && isCaveAt(x, y, z, h - y)) continue;
+        else if (y > fillBottom + 3 && y <= (h < SEA_LEVEL ? h - 3 : h) &&
+                 ((carved[(y << 8) | col] !== 0 && b !== BLOCK.SNOW_BLOCK) || isCaveAt(x, y, z, h - y))) { // 雪ブロックは洞窟が貫通しない（本家準拠）
+          // 洞窟の最深部は溶岩だまり。それより上は地下水脈（水・溶岩の地底湖）。水源と同じく wl に流体として記録
+          const fl = y <= fillBottom + CAVE_LAVA_DEPTH ? BLOCK.LAVA : (h - y >= AQUIFER_MIN_DEPTH ? aquiferFluid(x, y, z) : 0);
+          if (fl) {
+            blocks[(y << 8) | col] = fl;
+            if (!wl) wl = new Uint8Array(LAYER * CH);
+            wl[(y << 8) | col] = 1;
+            if (fl === BLOCK.LAVA) genLava.push(x, y, z);
+          }
+          continue;
+        }
+        if (b === BLOCK.STONE && y > fillBottom + 3 && h - y > 4) { // 地層の塊: 石の中に砂利・土のポケット（本家の洞窟壁でよく見る）
+          const u = noise3(x * STRATA_BLOB_FREQ - 91.3, y * STRATA_BLOB_FREQ * 1.3 + 17.7, z * STRATA_BLOB_FREQ + 133.1);
+          if (u > STRATA_GRANITE_MIN) b = BLOCK.GRANITE; else if (u < STRATA_DIORITE_MAX) b = BLOCK.DIORITE;
+          else if (noise3(x * STRATA_BLOB_FREQ + 407.9, y * STRATA_BLOB_FREQ * 1.3 - 63.1, z * STRATA_BLOB_FREQ - 251.7) > STRATA_ANDESITE_MIN) b = BLOCK.ANDESITE;
+          const v = b !== BLOCK.STONE ? 0.5 : noise3(x * STRATA_FREQ + 311.7, y * STRATA_FREQ * 1.4 - 41.3, z * STRATA_FREQ - 203.9);
+          if (v > STRATA_GRAVEL_MIN) b = BLOCK.GRAVEL; else if (v < STRATA_DIRT_MAX) b = BLOCK.DIRT;
+        }
         blocks[(y << 8) | col] = b;
       }
       if (h < SEA_LEVEL) {
@@ -1035,7 +1266,7 @@ function generateChunkData(cx, cz, mods) {
   }
 
   // ------ プレイヤーによる変更の復元 ------
-  const torches = [];
+  const torches = [], lavaCells = genLava; // 生成した溶岩も光源（15）にするためリストを引き継ぐ
   if (mods) {
     for (let i = 0; i < mods.length; i += 4) {
       const mx = mods[i], my = mods[i + 1], mz = mods[i + 2], mid = mods[i + 3];
@@ -1047,10 +1278,11 @@ function generateChunkData(cx, cz, mods) {
         blocks[idx] = f.id;
         if (!wl) wl = new Uint8Array(LAYER * CH);
         wl[idx] = f.lv + 1;
+        if (f.id === BLOCK.LAVA) lavaCells.push(mx, my, mz);
         continue;
       }
       blocks[idx] = mid;
-      if (isFluid(mid)) { if (!wl) wl = new Uint8Array(LAYER * CH); wl[idx] = 1; }
+      if (isFluid(mid)) { if (!wl) wl = new Uint8Array(LAYER * CH); wl[idx] = 1; if (mid === BLOCK.LAVA) lavaCells.push(mx, my, mz); }
       else if (wl) wl[idx] = 0;
       if (mid === BLOCK.TORCH) torches.push(mx, my, mz);
     }
@@ -1070,7 +1302,7 @@ function generateChunkData(cx, cz, mods) {
     colTop[col] = topOpaque;
     if (topAny > maxY) maxY = topAny;
   }
-  return { blocks, colTop, wl, torches, maxY };
+  return { blocks, colTop, wl, torches, lava: lavaCells, maxY };
 }
 
 // ============================================================
@@ -1350,7 +1582,7 @@ function handleMessage(m, post) {
       const r = generateChunkData(m.cx, m.cz, m.mods);
       const tr = [r.blocks.buffer, r.colTop.buffer];
       if (r.wl) tr.push(r.wl.buffer);
-      post({ t: 'gen', epoch: m.epoch, cx: m.cx, cz: m.cz, blocks: r.blocks, colTop: r.colTop, wl: r.wl, torches: r.torches, maxY: r.maxY }, tr);
+      post({ t: 'gen', epoch: m.epoch, cx: m.cx, cz: m.cz, blocks: r.blocks, colTop: r.colTop, wl: r.wl, torches: r.torches, lava: r.lava, maxY: r.maxY }, tr);
       break;
     }
     case 'mesh': {
@@ -1414,7 +1646,7 @@ scene.add(sunLight);
 // ============================================================
 // 地形生成・メッシュ生成は、メインスレッドと Web Worker の両方で同じコードを動かす（gen-src）
 const GEN = new Function(document.getElementById('gen-src').textContent +
-  '\nreturn { BLOCK, CH, LAYER, PW, UNDEF_TOP, BLOCK_CAP, BF, BLOCK_FLAGS, defineBlock, isSolid, isFluid, isCross, lightOpaque, blocksSky, FLUIDS, FLUID_MOD_BASE, registerFluid, fluidModId, fluidFromMod, mulberry32, setSeed, terrainHeight, generateChunkData, meshChunk, setTileTable, handleMessage };')();
+  '\nreturn { BLOCK, CH, LAYER, PW, UNDEF_TOP, BLOCK_CAP, BF, BLOCK_FLAGS, defineBlock, isSolid, isFluid, isCross, lightOpaque, blocksSky, FLUIDS, FLUID_MOD_BASE, registerFluid, fluidModId, fluidFromMod, mulberry32, setSeed, terrainHeight, oceanBlend, mountainWeight, isDesertAt, generateChunkData, meshChunk, setTileTable, handleMessage };')();
 const BLOCK = GEN.BLOCK;
 const { BLOCK_CAP, BF, BLOCK_FLAGS, defineBlock, isSolid, isFluid, isCross, lightOpaque, blocksSky, FLUIDS, registerFluid, fluidModId } = GEN;
 
@@ -1436,18 +1668,24 @@ const BLOCK_COLORS = {
   [BLOCK.PLANK]:  { all: 0xb98a55 },
   [BLOCK.BRICK]:  { all: 0xa8503c },
   [BLOCK.COBBLESTONE]: { all: 0x6e6e6e },
+  [BLOCK.GRANITE]: { all: 0x956c5a }, [BLOCK.DIORITE]: { all: 0xbdbdbd }, [BLOCK.ANDESITE]: { all: 0x878787 },
+  [BLOCK.CHEST]: { top: 0x9a6b2b, side: 0x8a5e26, bottom: 0x7a521f },
   // 作業台: 上面は格子模様のある明るいオーク色、側面は道具が描かれた濃い茶色、
   // 下面はオークの板材と同じテクスチャ（PLANKと同色）にする
   [BLOCK.CRAFTING_TABLE]: { top: 0xc17a3d, side: 0x7a5230, bottom: 0xb98a55 },
   // WATERは実際のブロック描画では専用の半透明マテリアル(waterMat)を使うため
   // getMaterials()からは呼ばれないが、ホットバーのスワッチ色表示のために登録しておく
   [BLOCK.WATER]: { all: 0x4fa8e0 },
+  [BLOCK.LAVA]: { all: 0xe2530f },
   [BLOCK.TORCH]: { all: 0xffc34d },
   // 鉱石: all=母岩の色, ore=鉱石の斑点の色（専用テクスチャを生成する）
   [BLOCK.COAL_ORE]:    { all: 0x8a8a8a, ore: 0x1e1e1e },
   [BLOCK.IRON_ORE]:    { all: 0x8a8a8a, ore: 0xd8a37a },
   [BLOCK.GOLD_ORE]:    { all: 0x8a8a8a, ore: 0xf5d742 },
   [BLOCK.DIAMOND_ORE]: { all: 0x8a8a8a, ore: 0x4be3e3 },
+  [BLOCK.LAPIS_ORE]:    { all: 0x8a8a8a, ore: 0x2f4fd6 },
+  [BLOCK.REDSTONE_ORE]: { all: 0x8a8a8a, ore: 0xd62a1e },
+  [BLOCK.COPPER_ORE]:   { all: 0x8a8a8a, ore: 0xc8703a },
   [BLOCK.FURNACE]:     { top: 0x7a7a7a, side: 0x5f5f5f, bottom: 0x7a7a7a },
   [BLOCK.BEDROCK]:     { all: 0x2e2e2e },
   [BLOCK.GLASS]:       { all: 0xd6eef5 },
@@ -1735,7 +1973,8 @@ function paintFace(id, face) {
         R(9, 6, 4, 3, '#9a9a9a'); R(10, 9, 2, 5, '#4d3219');                         // かなづち
       }
       break;
-    case BLOCK.COAL_ORE: case BLOCK.IRON_ORE: case BLOCK.GOLD_ORE: case BLOCK.DIAMOND_ORE: {
+    case BLOCK.COAL_ORE: case BLOCK.IRON_ORE: case BLOCK.GOLD_ORE: case BLOCK.DIAMOND_ORE:
+    case BLOCK.LAPIS_ORE: case BLOCK.REDSTONE_ORE: case BLOCK.COPPER_ORE: {
       paintStone();
       const oc = BLOCK_COLORS[id].ore, c = new THREE.Color(oc);
       const sh = k => `rgb(${Math.min(255, c.r * 255 * k) | 0},${Math.min(255, c.g * 255 * k) | 0},${Math.min(255, c.b * 255 * k) | 0})`;
@@ -1790,6 +2029,18 @@ function paintFace(id, face) {
         }
       }
       break;
+    case BLOCK.CHEST: { // 板材の箱。側面はフタの継ぎ目と金具、上下面は縁取り
+      noise(['#a0702e', '#966828', '#aa7835', '#9a6b2b']);
+      const edge = '#4d3219';
+      R(0, 0, 16, 1, edge); R(0, 15, 16, 1, edge); R(0, 0, 1, 16, edge); R(15, 0, 1, 16, edge);
+      if (face === 1) {
+        R(1, 5, 14, 1, edge); R(1, 6, 14, 1, '#7a531f');            // フタとの境目と、その影
+        R(7, 4, 2, 4, '#c9c9c9'); R(7, 4, 2, 1, '#e8e8e8'); R(7, 7, 2, 1, '#8a8a8a'); P(7, 6, '#3a3a3a'); // 留め金
+      } else {
+        R(1, 1, 14, 1, '#b98a4a'); R(1, 1, 1, 14, '#b98a4a');          // 上下面: 明るいふち
+      }
+      break;
+    }
     case BLOCK.OBSIDIAN:
       noise(['#14101f', '#1b1230', '#0f0b1a', '#241942', '#171026']);
       for (let i = 0; i < 10; i++) P(Math.floor(rnd() * 16), Math.floor(rnd() * 16), pick(['#3b2a66', '#4a3380', '#2c1f50']));
@@ -1816,6 +2067,18 @@ function paintFace(id, face) {
     case BLOCK.STONE_BRICKS:
       noise(['#7d7d7d', '#858585', '#777777', '#808080']);
       R(0, 7, 16, 1, '#555555'); R(0, 15, 16, 1, '#555555'); R(7, 0, 1, 7, '#555555'); R(3, 8, 1, 7, '#555555'); R(11, 8, 1, 7, '#555555');
+      break;
+    case BLOCK.GRANITE:
+      noise(['#956c5a', '#9d7360', '#8c6452', '#a47a66', '#855e4e']);
+      for (let i = 0; i < 10; i++) P(Math.floor(rnd() * 16), Math.floor(rnd() * 16), '#6f4a3c');
+      break;
+    case BLOCK.DIORITE:
+      noise(['#bdbdbd', '#c8c8c8', '#b0b0b0', '#d2d2d2', '#a4a4a4']);
+      for (let i = 0; i < 10; i++) P(Math.floor(rnd() * 16), Math.floor(rnd() * 16), '#8a8a8a');
+      break;
+    case BLOCK.ANDESITE:
+      noise(['#878787', '#8f8f8f', '#7d7d7d', '#969696', '#767676']);
+      for (let i = 0; i < 8; i++) P(Math.floor(rnd() * 16), Math.floor(rnd() * 16), '#a4a4a4');
       break;
     case BLOCK.SMOOTH_STONE:
       noise(['#9c9c9c', '#a2a2a2', '#969696', '#9c9c9c']);
@@ -1889,8 +2152,10 @@ function chunkAtC(cx, cz) {
 function registerChunk(cx, cz, d) {
   const c = {
     cx, cz, blocks: d.blocks, light: new Uint8Array(LAYER * CH), colTop: d.colTop,
-    wl: d.wl || null, maxY: d.maxY, inflight: false, sv: 0,
+    wl: d.wl || null, maxY: d.maxY, inflight: false, sv: 0, ice: null,
   };
+  // 氷のセル番号を控えておく（光源の熱で溶ける処理を、全ブロックを調べずに行うため）
+  for (let i = c.blocks.indexOf(BLOCK.ICE); i !== -1; i = c.blocks.indexOf(BLOCK.ICE, i + 1)) (c.ice || (c.ice = new Set())).add(i);
   loadedChunks.set(cx + ',' + cz, c);
   chunkByNum.set(numKey(cx, cz), c);
   return c;
@@ -1961,7 +2226,7 @@ const DIRS4 = [[1,0],[-1,0],[0,1],[0,-1]];
 // uSky : 空の光15の場所の明るさ(0〜1)。atlas以外のマテリアル（腕・持ち物・水など）が使う
 // uDark: 空の暗さ（0=昼 〜 11=夜）。内部の空の明るさ = 空の光 - 空の暗さ（wiki「内部の明るさ」）
 // uSkyTint: 空の光の色（昼は白、夜は青み）
-const lightUniforms = { uBright: { value: 1 }, uSky: { value: 1 }, uDark: { value: 0 }, uSkyTint: { value: new THREE.Vector3(1, 1, 1) } };
+const lightUniforms = { uAO: { value: 1 }, uSkyShade: { value: 1 }, uBright: { value: 1 }, uSky: { value: 1 }, uDark: { value: 0 }, uSkyTint: { value: new THREE.Vector3(1, 1, 1) } };
 // 明るさ0（真っ暗）でも最低限見えるようにする底上げ。 出力 = 底 + (1 - 底) × 元の明るさ  → 明るさ15は常に1.0のまま。
 // 数値を大きくすると暗所が明るく、小さくすると本家に近い暗さになる（0.05 でほぼ元の暗さ）。
 const LIGHT_FLOOR = [0.17, 0.18, 0.22];   // R,G,B（わずかに青みを帯びた暗がり）
@@ -1993,9 +2258,11 @@ function setBlock(x, y, z, id) {
   const c = chunkAtC(x >> 4, z >> 4);
   if (c === null) return; // 未生成のチャンクには書き込めない
   const col = ((z & 15) << 4) | (x & 15), i = (y << 8) | col;
+  if (c.blocks[i] === BLOCK.ICE && id !== BLOCK.ICE && c.ice) c.ice.delete(i);
+  else if (id === BLOCK.ICE) (c.ice || (c.ice = new Set())).add(i);
   c.blocks[i] = id;
   // 水以外のブロックを置いた/消した場合は、その位置に残っていたかもしれない水の重み情報を消す
-  if (id !== BLOCK.WATER && c.wl !== null) c.wl[i] = 0;
+  if (!isFluid(id) && c.wl !== null) c.wl[i] = 0;
   if (y > c.maxY) c.maxY = y;
   // 列の最上位の不透明ブロックを更新（光の「空に開けているか」判定に使う）
   const t = c.colTop[col];
@@ -2145,6 +2412,7 @@ function relightAround(cx0, cy0, cz0) {
       if (lightOpaque(id)) continue;
       const edge = x === x0 || x === x1 || z === z0 || z === z1 || y === y0 || y === y1;
       if (id === BLOCK.TORCH) { setLightAt(x, y, z, false, 14); qb.push(x, y, z); }
+      if (id === BLOCK.LAVA) { setLightAt(x, y, z, false, 15); qb.push(x, y, z); } // 溶岩は明るさ15の光源
       if (y > T && !edge) continue;
       let ss = 0, bs = 0;
       for (const [dx, dy, dz] of DIRS6) {
@@ -2270,12 +2538,13 @@ function getAtlasMaterial() {
   atlasMaterial.onBeforeCompile = shader => {
     shader.uniforms.uDark = lightUniforms.uDark; shader.uniforms.uBright = lightUniforms.uBright;
     shader.uniforms.uSkyTint = lightUniforms.uSkyTint;
+    shader.uniforms.uAO = lightUniforms.uAO; shader.uniforms.uSkyShade = lightUniforms.uSkyShade; // 影MOD
     shader.uniforms.uAtlas = { value: atlasTexture };
     shader.vertexShader = shader.vertexShader
       .replace('#include <common>', '#include <common>\nattribute vec2 aUv;\nattribute float aTile;\nattribute vec2 aLight;\nattribute float aAO;\nvarying vec2 vTuv;\nvarying float vTile;\nvarying vec2 vLight;\nvarying float vAO;')
       .replace('#include <begin_vertex>', '#include <begin_vertex>\nvTuv = aUv; vTile = aTile; vLight = aLight; vAO = aAO;');
     shader.fragmentShader = shader.fragmentShader
-      .replace('#include <common>', '#include <common>\nvarying vec2 vTuv;\nvarying float vTile;\nvarying vec2 vLight;\nvarying float vAO;\nuniform float uDark;\nuniform float uBright;\nuniform vec3 uSkyTint;\nuniform sampler2D uAtlas;')
+      .replace('#include <common>', '#include <common>\nvarying vec2 vTuv;\nvarying float vTile;\nvarying vec2 vLight;\nvarying float vAO;\nuniform float uDark;\nuniform float uBright;\nuniform float uAO;\nuniform float uSkyShade;\nuniform vec3 uSkyTint;\nuniform sampler2D uAtlas;')
       .replace('#include <color_fragment>', `
         float tIdx = floor(vTile + 0.5);
         vec2 tf = fract(vTuv);
@@ -2284,7 +2553,7 @@ function getAtlasMaterial() {
         float trow = floor(tIdx / ${ATLAS_COLS}.0);
         vec2 auv = vec2(tcol * ${TILE_PX}.0 + px.x + 0.5, trow * ${TILE_PX}.0 + (${TILE_PX - 1}.0 - px.y) + 0.5) / vec2(${W}.0, ${Hh}.0);
         // vLight = (空の光, ブロックの光)  ※頂点ごとの光レベル(0〜15)を補間したもの
-        float skL = max(vLight.x - uDark, 0.0);          // 内部の空の明るさ = 空の光 - 空の暗さ
+        float skL = max(mix(15.0, vLight.x, uSkyShade) - uDark, 0.0); // 影MOD: 空の光の影（uSkyShade=0 で影を付けない）          // 内部の空の明るさ = 空の光 - 空の暗さ
         float blL = vLight.y;
         float skB = skL > 0.0 ? pow(0.8, 15.0 - skL) : 0.0; // 1レベルごとに x0.8
         float blB = blL > 0.0 ? pow(0.8, 15.0 - blL) : 0.0;
@@ -2295,7 +2564,7 @@ function getAtlasMaterial() {
         vec4 texel = texture2D(uAtlas, auv);
         if (texel.a < 0.5) discard; // 葉の穴
         lc = max(vec3(0.0), vec3(1.0) - (vec3(1.0) - lc) / uBright); // 明るさ15は不変、0との幅だけ伸縮
-        diffuseColor.rgb *= texel.rgb * lc * vAO;
+        diffuseColor.rgb *= texel.rgb * lc * mix(1.0, vAO, uAO); // 影MOD: 角の影（AO）
       `);
   };
   return atlasMaterial;
@@ -2360,6 +2629,11 @@ function finishGen(cx, cz, d) {
     const cells = [];
     for (let i = 0; i < d.torches.length; i += 3) cells.push([d.torches[i], d.torches[i + 1], d.torches[i + 2]]);
     seedTorchLight(cells);
+  }
+  if (d.lava && d.lava.length) { // 変更記録に残っている溶岩（流れた溶岩を含む）も光源（15）にする
+    const lc = [];
+    for (let i = 0; i < d.lava.length; i += 3) lc.push([d.lava[i], d.lava[i + 1], d.lava[i + 2]]);
+    seedTorchLight(lc, 15);
   }
   if (litFurnaces.size) { // 再生成されたチャンクにある燃焼中のかまども光源にする
     const fc = [];
@@ -2430,13 +2704,21 @@ const waterMatShared = patchLit(new THREE.MeshLambertMaterial({ color: 0x4fa8e0,
 const waterBoxGeo = new THREE.BoxGeometry(1, 1, 1);
 // 流体ごとのマテリアル（水は共有マテリアル、それ以外は登録された色・不透明度から作る）
 const fluidMaterials = new Map();
+let lavaMatRef = null; // 溶岩マテリアル（色をゆらがせるために保持）
+function updateLavaGlow() {
+  if (!lavaMatRef) return;
+  const t = performance.now() / 1000;
+  lavaMatRef.color.setHSL(0.05 + 0.012 * Math.sin(t * 1.7), 0.92, 0.5 + 0.04 * Math.sin(t * 2.9 + 1));
+}
 function fluidMaterial(id) {
   let m = fluidMaterials.get(id);
   if (!m) {
     const d = FLUIDS[id];
     m = id === BLOCK.WATER ? waterMatShared
+      : d.emissive ? new THREE.MeshBasicMaterial({ color: d.color, side: THREE.DoubleSide }) // 自ら光る流体（溶岩）は昼夜で暗くならない
       : patchLit(new THREE.MeshLambertMaterial({ color: d.color, transparent: d.opacity < 1, opacity: d.opacity, depthWrite: d.opacity >= 1, side: THREE.DoubleSide }));
     fluidMaterials.set(id, m);
+    if (id === BLOCK.LAVA) lavaMatRef = m;
   }
   return m;
 }
@@ -2918,6 +3200,42 @@ function tryUpgradeToInfiniteSource(fid, x, y, z) {
   return true;
 }
 
+// ------ 水と溶岩の反応（本家準拠） ------
+//   ・溶岩源に水が触れる（水が横か真上にある）→ 黒曜石
+//   ・流れる溶岩に水が触れる → 丸石
+//   ・溶岩が水の上へ流れ落ちる → 水のマスが石になる
+//   ・水の真上に溶岩があるだけでは溶岩側は反応しない（下の水が石になる）
+const LAVA_WATER_DIRS = [[1, 0, 0], [-1, 0, 0], [0, 0, 1], [0, 0, -1], [0, 1, 0]];
+function fluidFizz(x, y, z, resultId) { // 反応の音とかけら。遠くでは鳴らさない
+  if (Math.hypot(x + 0.5 - player.pos.x, z + 0.5 - player.pos.z) < 24) { SFX.fizz(); Particles.burst(x, y, z, resultId); }
+}
+function replaceFluidCell(x, y, z, newId) { // 流体のマスを固体に置き換える（保存・光・メッシュ更新つき）
+  setBlock(x, y, z, newId);
+  recordEdit(x, y, z, newId);
+  waterLightQueue.push(x, y, z);
+  const ck = chunkKeyOf(...worldToChunk(x, z));
+  if (chunkMeshGroups.has(ck)) markDirty(ck);
+  fluidFizz(x, y, z, newId);
+}
+function lavaTouchWater(x, y, z) { // (x,y,z)の溶岩が水に触れていれば固める。固めたら true
+  if (getBlock(x, y, z) !== BLOCK.LAVA) return false;
+  let wet = false;
+  for (const [dx, dy, dz] of LAVA_WATER_DIRS) if (getBlock(x + dx, y + dy, z + dz) === BLOCK.WATER) { wet = true; break; }
+  if (!wet) return false;
+  const lvl = fluidLevel.get3(x, y, z);
+  const isSource = (lvl === undefined || lvl === 0) && getBlock(x, y + 1, z) !== BLOCK.LAVA; // 上に溶岩がある0は落下中の溶岩（流れ扱い）
+  replaceFluidCell(x, y, z, isSource ? BLOCK.OBSIDIAN : BLOCK.COBBLESTONE);
+  return true;
+}
+// 流体 fid が (x,y,z) に置かれた直後に呼ぶ。そのマス自身が固まって消えたら true
+function fluidReact(fid, x, y, z) {
+  if (fid === BLOCK.LAVA) return lavaTouchWater(x, y, z);
+  if (fid === BLOCK.WATER) {
+    for (const [dx, dy, dz] of [[1, 0, 0], [-1, 0, 0], [0, 0, 1], [0, 0, -1], [0, -1, 0]]) lavaTouchWater(x + dx, y + dy, z + dz); // 同じ高さか下の溶岩
+  }
+  return false;
+}
+
 // 毎フレーム呼び出す。予定時刻に達したタスクだけを処理して実際にブロックを置き、さらに1マス先への広がりを予約する。
 function processFluidQueue() {
   if (fluidPendingQueue.length === 0) return;
@@ -2928,16 +3246,21 @@ function processFluidQueue() {
     if (task.dueTime > now) { remaining.push(task); continue; }
     const { fid, x, y, z, level } = task;
     const def = FLUIDS[fid];
+    if (fid === BLOCK.LAVA && getBlock(x, y, z) !== fid) continue; // 水に触れて固まった溶岩からは広がらない
 
     // まず真下を確認: 空気なら重力に従って落ちる（下方向は距離制限なし）
     const below = getBlock(x, y-1, z);
-    if (below === BLOCK.AIR || isCross(below)) {
+    if (fid === BLOCK.LAVA && below === BLOCK.WATER) { // 溶岩が水の上へ: 水のマスが石になる
+      replaceFluidCell(x, y-1, z, BLOCK.STONE);
+      touchedChunks.add(chunkKeyOf(...worldToChunk(x, z)));
+      // 石になった後は足場ができたので、そのまま下の水平拡散へ進む（continueしない）
+    } else if (below === BLOCK.AIR || isCross(below) || below === BLOCK.TORCH) { // 流体は松明も壊して流れる
       setBlock(x, y-1, z, fid);
       waterLightQueue.push(x, y-1, z);
       fluidLevel.set3(x,y-1,z, 0); // 落下した流体は新しい水源相当（下方向では重みが減衰しない）
       recordFluid(fid, x, y-1, z, 0);
       touchedChunks.add(chunkKeyOf(...worldToChunk(x, z)));
-      scheduleFluidSpread(fid, x, y-1, z, 0, def.secondsPerBlock);
+      if (!fluidReact(fid, x, y-1, z)) scheduleFluidSpread(fid, x, y-1, z, 0, def.secondsPerBlock);
       continue;
     }
     if (below === fid) continue; // 既に同じ流体がある場合はそこで打ち止め（無限落下ループ防止）
@@ -2951,7 +3274,7 @@ function processFluidQueue() {
         if (tryUpgradeToInfiniteSource(fid, nx, ny, nz)) touchedChunks.add(chunkKeyOf(...worldToChunk(nx, nz)));
         continue;
       }
-      if (nb !== BLOCK.AIR && !isCross(nb)) continue; // 空気・植物以外（別の流体も含む）で塞がれていれば流れない
+      if (nb !== BLOCK.AIR && !isCross(nb) && nb !== BLOCK.TORCH) continue; // 空気・植物・松明以外（別の流体も含む）で塞がれていれば流れない
       flowable.push({ nx, ny, nz, weight: findDownhillWeight(fid, nx, y, nz) });
     }
     if (flowable.length === 0) continue;
@@ -2965,7 +3288,7 @@ function processFluidQueue() {
       fluidLevel.set3(nx,ny,nz, nextLevel);
       recordFluid(fid, nx, ny, nz, nextLevel);
       touchedChunks.add(chunkKeyOf(...worldToChunk(nx, nz)));
-      scheduleFluidSpread(fid, nx, ny, nz, nextLevel, def.secondsPerBlock);
+      if (!fluidReact(fid, nx, ny, nz)) scheduleFluidSpread(fid, nx, ny, nz, nextLevel, def.secondsPerBlock);
       for (const [ux, uy, uz] of [[nx,ny,nz], [nx+1,ny,nz], [nx-1,ny,nz], [nx,ny,nz+1], [nx,ny,nz-1]]) {
         if (tryUpgradeToInfiniteSource(fid, ux, uy, uz)) touchedChunks.add(chunkKeyOf(...worldToChunk(ux, uz)));
       }
@@ -3001,7 +3324,7 @@ function triggerFluidSpreadAround(x, y, z) {
     const nb = getBlock(nx,ny,nz);
     if (!isFluid(nb)) continue;
     const lvl = fluidLevel.get3(nx,ny,nz);
-    scheduleFluidSpread(nb, nx, ny, nz, lvl === undefined ? 0 : lvl, 0);
+    scheduleFluidSpread(nb, nx, ny, nz, lvl === undefined ? 0 : lvl, FLUIDS[nb].secondsPerBlock); // 即座には流れず、その流体の速度（溶岩1.5秒/水0.25秒など）に従う
   }
 }
 
@@ -3096,6 +3419,11 @@ window.addEventListener('keydown', e => {
       }
       lastWPressTime = now;
     }
+    // Ctrlでダッシュ: Wを押したままCtrlを押した時（Ctrl+Wのタブ閉じ衝突を避けるためW先押し限定）
+    if ((e.code === 'ControlLeft' || e.code === 'ControlRight') && keys['KeyW'] && locked && !player.dead
+        && !invOpen && !tableOpen && !furnaceOpen && !chestOpen) {
+      isSprinting = true;
+    }
     // クリエイティブ: スペース2回連打で飛行の切り替え
     if (e.code === 'Space' && gameMode === 'creative' && locked) {
       const now2 = performance.now();
@@ -3103,7 +3431,7 @@ window.addEventListener('keydown', e => {
       lastSpacePressTime = now2;
     }
   }
-  if ((invOpen || tableOpen || furnaceOpen) && e.code !== 'KeyE' && e.code !== 'Escape') {
+  if ((invOpen || tableOpen || furnaceOpen || chestOpen) && e.code !== 'KeyE' && e.code !== 'Escape') {
     const n = parseInt(e.key);
     if (n >= 1 && n <= 9) hoverSwap(n-1);
     return;
@@ -3173,11 +3501,13 @@ const blockNames = {
   [BLOCK.WOOD]: '木', [BLOCK.LEAVES]: '葉', [BLOCK.PLANK]: '板材', [BLOCK.BRICK]: 'レンガ',
   [BLOCK.COBBLESTONE]: '丸石', [BLOCK.WATER]: '水（水源）', [BLOCK.CRAFTING_TABLE]: '作業台', [BLOCK.TORCH]: '松明', [BLOCK.COAL_ORE]: '石炭鉱石', [BLOCK.IRON_ORE]: '鉄鉱石', [BLOCK.GOLD_ORE]: '金鉱石', [BLOCK.DIAMOND_ORE]: 'ダイヤモンド鉱石', [BLOCK.FURNACE]: 'かまど', [BLOCK.BEDROCK]: '岩盤'
 };
+blockNames[BLOCK.LAPIS_ORE] = 'ラピスラズリ鉱石'; blockNames[BLOCK.REDSTONE_ORE] = 'レッドストーン鉱石'; blockNames[BLOCK.COPPER_ORE] = '銅鉱石';
 blockNames[BLOCK.SNOW_BLOCK] = '雪ブロック'; blockNames[BLOCK.GRAVEL] = '砂利'; blockNames[BLOCK.DEAD_BUSH] = '枯れ木'; blockNames[BLOCK.TALL_GRASS] = '草'; blockNames[BLOCK.DANDELION] = 'タンポポ'; blockNames[BLOCK.POPPY] = 'ポピー'; blockNames[BLOCK.SANDSTONE] = '砂岩'; blockNames[BLOCK.CACTUS] = 'サボテン';
 blockNames[BLOCK.OAK_SAPLING] = 'オークの苗木'; blockNames[BLOCK.BIRCH_SAPLING] = '白樺の苗木'; blockNames[BLOCK.SPRUCE_SAPLING] = 'トウヒの苗木';
 blockNames[BLOCK.BIRCH_WOOD] = '白樺の原木'; blockNames[BLOCK.BIRCH_LEAVES] = '白樺の葉'; blockNames[BLOCK.SPRUCE_WOOD] = 'トウヒの原木'; blockNames[BLOCK.SPRUCE_LEAVES] = 'トウヒの葉';
+blockNames[BLOCK.GRANITE] = '花崗岩'; blockNames[BLOCK.DIORITE] = '閃緑岩'; blockNames[BLOCK.ANDESITE] = '安山岩'; blockNames[BLOCK.CHEST] = 'チェスト';
 blockNames[BLOCK.COAL_BLOCK] = '石炭ブロック'; blockNames[BLOCK.IRON_BLOCK] = '鉄ブロック'; blockNames[BLOCK.GOLD_BLOCK] = '金ブロック'; blockNames[BLOCK.DIAMOND_BLOCK] = 'ダイヤモンドブロック'; blockNames[BLOCK.STONE_BRICKS] = '石レンガ'; blockNames[BLOCK.SMOOTH_STONE] = '磨かれた石';
-blockNames[BLOCK.GLASS] = 'ガラス'; blockNames[BLOCK.BOOKSHELF] = '本棚'; blockNames[BLOCK.OBSIDIAN] = '黒曜石'; blockNames[BLOCK.ICE] = '氷';
+blockNames[BLOCK.GLASS] = 'ガラス'; blockNames[BLOCK.BOOKSHELF] = '本棚'; blockNames[BLOCK.OBSIDIAN] = '黒曜石'; blockNames[BLOCK.ICE] = '氷'; blockNames[BLOCK.LAVA] = '溶岩';
 blockNames[BLOCK.WOOL_WHITE] = '白の羊毛'; blockNames[BLOCK.WOOL_RED] = '赤の羊毛'; blockNames[BLOCK.WOOL_BLUE] = '青の羊毛';
 blockNames[BLOCK.WOOL_GREEN] = '緑の羊毛'; blockNames[BLOCK.WOOL_YELLOW] = '黄の羊毛'; blockNames[BLOCK.WOOL_BLACK] = '黒の羊毛';
 let selectedSlot = 0;
@@ -3203,10 +3533,12 @@ const TOOL_TIERS = {
   stone:   { n: '石',     tier: 2, speed: 4, dur: 131,  color: '#8a8a8a' },
   iron:    { n: '鉄',     tier: 3, speed: 6, dur: 250,  color: '#e6e6e6' },
   diamond: { n: 'ダイヤ', tier: 4, speed: 8, dur: 1561, color: '#4be3e3' },
+  // 金: 採掘レベル・攻撃力は木と同じ(tier 1)、速度は最速、耐久は最低（本家準拠）
+  gold:    { n: '金',     tier: 1, speed: 12, dur: 32,  color: '#f5d33d' },
 };
 const TOOL_KINDS = { pickaxe: { n: 'ツルハシ', e: '⛏️' }, axe: { n: '斧', e: '🪓' }, shovel: { n: 'シャベル', e: '🥄' }, sword: { n: '剣', e: '🗡️' } };
-const TIER_DUR = {}, TIER_COLORS = {}; // ティア番号 -> 耐久値 / 表示色（本家準拠）
-for (const m in TOOL_TIERS) { TIER_DUR[TOOL_TIERS[m].tier] = TOOL_TIERS[m].dur; TIER_COLORS[TOOL_TIERS[m].tier] = TOOL_TIERS[m].color; }
+const TIER_DUR = {}, TIER_COLORS = {}; // 素材名 -> 耐久値 / 表示色（金と木はtier番号が同じなので素材名で管理）
+for (const m in TOOL_TIERS) { TIER_DUR[m] = TOOL_TIERS[m].dur; TIER_COLORS[m] = TOOL_TIERS[m].color; }
 
 const ITEMS = {
   stick:{n:'棒',e:'🥢',max:64},
@@ -3215,19 +3547,24 @@ const ITEMS = {
   iron_ingot:{n:'鉄インゴット',e:'🔩',max:64},
   gold_ingot:{n:'金インゴット',e:'🟨',max:64},
   diamond:{n:'ダイヤモンド',e:'💎',max:64},
-  shield:{n:'盾',e:'🛡️',max:1,off:true},
+  lapis_lazuli:{n:'ラピスラズリ',e:'🔵',max:64}, redstone:{n:'レッドストーン',e:'🔴',max:64}, copper_ingot:{n:'銅インゴット',e:'🟧',max:64},
+  shield:{n:'盾',e:'🛡️',max:1,off:true,adur:336},
   sign:{n:'看板',e:'🪧',max:16}, snowball:{n:'雪玉',e:'❄️',max:16},
   beef:{n:'生の牛肉',e:'🥩',max:64,food:3,sat:1.8}, cooked_beef:{n:'ステーキ',e:'🍖',max:64,food:8,sat:12.8},
   rotten_flesh:{n:'腐った肉',e:'🥓',max:64,food:4,sat:0.8}, leather:{n:'革',e:'🟫',max:64},
+  flint:{n:'火打石',e:'🪨',max:64},
+  bucket:{n:'バケツ',e:'🪣',max:16}, water_bucket:{n:'水入りバケツ',e:'💧',max:1}, lava_bucket:{n:'溶岩入りバケツ',e:'🔥',max:1},
 };
 for (const m in TOOL_TIERS) for (const k in TOOL_KINDS) {
   const t = TOOL_TIERS[m];
-  ITEMS[m + '_' + k] = { n: t.n + 'の' + TOOL_KINDS[k].n, e: TOOL_KINDS[k].e, max: 1, tool: { type: k, tier: t.tier, speed: t.speed, dur: t.dur } };
+  ITEMS[m + '_' + k] = { n: t.n + 'の' + TOOL_KINDS[k].n, e: TOOL_KINDS[k].e, max: 1, tool: { type: k, tier: t.tier, speed: t.speed, dur: t.dur, mat: m } };
 }
 // 防具: 素材ティア × 部位 から自動生成（pts=防御値 / dur=耐久値、本家準拠）
 const ARMOR_TIERS = {
   iron:    { n: '鉄',     pts: [2, 6, 5, 2], dur: [165, 240, 225, 195], mat: 'iron_ingot' },
   diamond: { n: 'ダイヤ', pts: [3, 8, 6, 3], dur: [363, 528, 495, 429], mat: 'diamond' },
+  leather: { n: '革',     pts: [1, 3, 2, 1], dur: [55, 80, 75, 65],     mat: 'leather' },
+  gold:    { n: '金',     pts: [2, 5, 3, 1], dur: [77, 112, 105, 91],   mat: 'gold_ingot' },
 };
 const ARMOR_KINDS = [['helmet', 'ヘルメット', '⛑️'], ['chestplate', 'チェストプレート', '🦺'], ['leggings', 'レギンス', '👖'], ['boots', 'ブーツ', '🥾']];
 for (const m in ARMOR_TIERS) ARMOR_KINDS.forEach(([k, nm, e], i) => {
@@ -3264,20 +3601,29 @@ document.head.appendChild(Object.assign(document.createElement('style'), { textC
 #fur-cursor{position:fixed;z-index:60;width:40px;height:40px;pointer-events:none;display:none;align-items:center;justify-content:center;transform:translate(-50%,-50%)}
 #fur-cursor .swatch{width:26px;height:26px}
 #fur-cursor .cnt{position:absolute;right:0;bottom:0;font-size:13px;font-weight:800;color:#fff;text-shadow:1px 1px 0 #333}
+#chest-overlay{display:none;position:fixed;inset:0;z-index:50;background:rgba(0,0,0,.55);align-items:center;justify-content:center}
+#chest-panel{background:#c6c6c6;border:3px solid;border-color:#fff #555 #555 #fff;padding:14px;color:#404040;box-shadow:0 0 0 3px #000}
+#chest-top{display:flex;flex-direction:column;align-items:flex-start;gap:6px;margin-bottom:14px}
+#chest-top .lbl{font-size:14px;font-weight:700}
+#chest-grid,#chest-store,#chest-hot{display:grid;grid-template-columns:repeat(9,40px);gap:4px}
+#chest-hot{margin-top:10px}
+#chest-cursor{position:fixed;z-index:60;width:40px;height:40px;pointer-events:none;display:none;align-items:center;justify-content:center;transform:translate(-50%,-50%)}
+#chest-cursor .swatch{width:26px;height:26px}
+#chest-cursor .cnt{position:absolute;right:0;bottom:0;font-size:13px;font-weight:800;color:#fff;text-shadow:1px 1px 0 #333}
 ` }));
 const maxOf = id => typeof id === 'number' ? 64 : ITEMS[id].max;
 const nameOf = id => typeof id === 'number' ? blockNames[id] : ITEMS[id].n;
 const crossIconCache = new Map();
 function crossIconURL(id) { // 十字形ブロックのアイコンは、テクスチャをそのまま見せる
   let u = crossIconCache.get(id);
-  if (!u) { u = paintFace(id, id === BLOCK.BOOKSHELF ? 1 : 0).toDataURL(); crossIconCache.set(id, u); }
+  if (!u) { u = paintFace(id, (id === BLOCK.BOOKSHELF || id === BLOCK.CHEST) ? 1 : 0).toDataURL(); crossIconCache.set(id, u); }
   return u;
 }
 function iconHTML(st) {
   if (!st) return '';
   let ic;
   if (typeof st.id === 'number') {
-    if ((BLOCK_FLAGS[st.id] & BF.CROSS) || st.id === BLOCK.GLASS || st.id === BLOCK.BOOKSHELF) {
+    if ((BLOCK_FLAGS[st.id] & BF.CROSS) || st.id === BLOCK.GLASS || st.id === BLOCK.BOOKSHELF || st.id === BLOCK.CHEST) {
       ic = `<div class="swatch" style="background:url(${crossIconURL(st.id)}) center/contain no-repeat;image-rendering:pixelated;box-shadow:none"></div>`;
     } else {
       const c = BLOCK_COLORS[st.id], hex = '#' + (c.top || c.ore || c.all).toString(16).padStart(6,'0');
@@ -3286,7 +3632,7 @@ function iconHTML(st) {
   } else ic = `<div class="emo">${ITEMS[st.id].e}</div>`;
   const tl = typeof st.id === 'string' ? ITEMS[st.id].tool : null;
   if (tl) { // 道具: ティア色の印と耐久バー
-    ic += `<span class="tier" style="background:${TIER_COLORS[tl.tier]}"></span>`;
+    ic += `<span class="tier" style="background:${TIER_COLORS[tl.mat]}"></span>`;
     if (st.dmg) { const f = Math.max(0, 1 - st.dmg / tl.dur); ic += `<span class="dur"><i style="width:${f * 100}%;background:hsl(${f * 120},90%,45%)"></i></span>`; }
   }
   const ad = typeof st.id === 'string' ? ITEMS[st.id].adur : 0;
@@ -3306,11 +3652,11 @@ function resetInventory(mode) {
   [{id:BLOCK.BRICK,count:64},{id:BLOCK.COBBLESTONE,count:64},{id:BLOCK.WOOD,count:32},
    {id:'iron_helmet',count:1},{id:'iron_chestplate',count:1},{id:'iron_leggings',count:1},{id:'iron_boots',count:1},
    {id:'shield',count:1},{id:'iron_pickaxe',count:1},{id:'stone_axe',count:1},{id:'iron_sword',count:1},
-   {id:'apple',count:16},{id:'stick',count:64},{id:BLOCK.TORCH,count:64},
+   {id:'apple',count:16},{id:'water_bucket',count:1},{id:BLOCK.TORCH,count:64},
    {id:BLOCK.FURNACE,count:8},{id:'coal',count:64},{id:'iron_ingot',count:64},{id:'diamond',count:64},
-   {id:BLOCK.SANDSTONE,count:64},{id:BLOCK.CACTUS,count:64},{id:BLOCK.DEAD_BUSH,count:64},
+   {id:BLOCK.SANDSTONE,count:64},{id:BLOCK.CACTUS,count:64},{id:'lava_bucket',count:1},
    {id:BLOCK.TALL_GRASS,count:64},{id:BLOCK.DANDELION,count:64},{id:BLOCK.POPPY,count:64},
-   {id:BLOCK.SNOW_BLOCK,count:64},{id:BLOCK.GRAVEL,count:64}]
+   {id:BLOCK.SNOW_BLOCK,count:64},{id:BLOCK.GRAVEL,count:64},{id:'bucket',count:16}]
     .forEach((st, k) => inv[9 + k] = st);
 }
 
@@ -3326,6 +3672,16 @@ function syncHotbar(updateHeld) {
   // 道具（文字列ID）の持ち替えや、道具が壊れて手が空になった場合も検知する
   const heldNow = inv[selectedSlot] ? inv[selectedSlot].id : null;
   if (updateHeld && heldNow !== lastHeld) updateHeldItemMesh();
+  updateOffhandHud();
+}
+// オフハンドの中身をホットバー左のHUDへ反映（空なら枠ごと隠す）
+function updateOffhandHud() {
+  const el = document.getElementById('offhand-hud');
+  if (!el) return;
+  const st = offhand[0];
+  el.style.display = st ? 'block' : 'none';
+  el.innerHTML = st ? `<div class="slot" title="${nameOf(st.id)}">${iconHTML(st)}</div>` : '';
+  updateOffhandMesh();
 }
 syncHotbar(false);
 
@@ -3342,19 +3698,21 @@ const cursorEl = invOv.querySelector('#inv-cursor'), tipEl = invOv.querySelector
 // クリック: 64個をカーソルへ / 右クリック: 1個 / Shift+クリック: 64個を持ち物へ。新ブロックを足しても自動で並ぶ。
 const cpPanel = document.createElement('div');
 cpPanel.id = 'cp-panel';
-cpPanel.innerHTML = '<div class="lbl">ブロック一覧</div><div class="sub">クリック=64個 / 右=1個 / Shift=持ち物へ</div><div id="cp-grid"></div>';
+cpPanel.innerHTML = '<div class="lbl">アイテム一覧</div><div class="sub">クリック=1スタック / 右=1個 / Shift=持ち物へ</div><div id="cp-grid"></div>';
 invOv.appendChild(cpPanel);
 cpPanel.addEventListener('mousedown', e => e.stopPropagation());
 const cpIds = Object.values(BLOCK).filter(id => id !== BLOCK.AIR && id !== BLOCK.WATER && id !== BLOCK.BEDROCK).sort((a, b) => a - b);
-for (const id of cpIds) {
+// ブロックに続けて、ITEMS（道具・防具・食料・素材）も自動で並べる。新アイテムを足しても手作業は不要
+function addCpSlot(id) {
   const el = document.createElement('div');
   el.className = 'islot';
-  el.title = blockNames[id] || '';
+  el.title = nameOf(id) || '';
   el.innerHTML = iconHTML({ id, count: 1 });
   el.addEventListener('mousedown', e => {
     e.preventDefault(); e.stopPropagation();
-    const n = e.button === 2 ? 1 : 64;
-    if (e.shiftKey) addItem({ id, count: 64 });
+    const full = Math.min(64, maxOf(id)); // 1スタック分（道具は1、雪玉・バケツは16など）
+    const n = e.button === 2 ? 1 : full;
+    if (e.shiftKey) addItem({ id, count: full });
     else {
       cursorEl.style.left = e.clientX + 'px'; cursorEl.style.top = e.clientY + 'px';
       cursor = { id, count: n };
@@ -3363,6 +3721,14 @@ for (const id of cpIds) {
   });
   cpPanel.querySelector('#cp-grid').appendChild(el);
 }
+for (const id of cpIds) addCpSlot(id);
+{
+  const sep = document.createElement('div');
+  sep.textContent = '道具・防具・食料・素材';
+  sep.style.cssText = 'grid-column:1/-1;font-size:11px;font-weight:700;text-align:center;border-top:2px solid #8b8b8b;padding-top:4px;margin-top:2px';
+  cpPanel.querySelector('#cp-grid').appendChild(sep);
+}
+for (const id of Object.keys(ITEMS)) addCpSlot(id);
 function updateCreativePalette() { try { cpPanel.style.display = gameMode === 'creative' ? 'block' : 'none'; } catch (_) { cpPanel.style.display = 'none'; } }
 invOv.addEventListener('contextmenu', e => e.preventDefault());
 
@@ -3459,10 +3825,11 @@ const SMELT = { [BLOCK.IRON_ORE]: 'iron_ingot', [BLOCK.GOLD_ORE]: 'gold_ingot', 
 const FUEL = { coal: 80, [BLOCK.WOOD]: 15, [BLOCK.BIRCH_WOOD]: 15, [BLOCK.SPRUCE_WOOD]: 15, [BLOCK.PLANK]: 15, stick: 5 }; // 燃焼時間(秒)
 const SMELT_TIME = 10;
 SMELT.beef = 'cooked_beef';
-const SMELT_XP = { [BLOCK.IRON_ORE]: 0.7, [BLOCK.GOLD_ORE]: 1.0, [BLOCK.COBBLESTONE]: 0.1, [BLOCK.SAND]: 0.1, beef: 0.35 }; // 1個あたりの経験値（本家準拠）
+SMELT[BLOCK.COPPER_ORE] = 'copper_ingot';
+const SMELT_XP = { [BLOCK.IRON_ORE]: 0.7, [BLOCK.GOLD_ORE]: 1.0, [BLOCK.COBBLESTONE]: 0.1, [BLOCK.SAND]: 0.1, beef: 0.35, [BLOCK.COPPER_ORE]: 0.7 }; // 1個あたりの経験値（本家準拠）
 // 木炭と、木製品の燃料（本家準拠: 木炭80秒、木の道具・作業台・本棚などは15秒、苗木は5秒）
 FUEL.charcoal = 80;
-for (const id of [BLOCK.CRAFTING_TABLE, BLOCK.BOOKSHELF]) FUEL[id] = 15;
+for (const id of [BLOCK.CRAFTING_TABLE, BLOCK.BOOKSHELF, BLOCK.CHEST]) FUEL[id] = 15;
 for (const id of [BLOCK.OAK_SAPLING, BLOCK.BIRCH_SAPLING, BLOCK.SPRUCE_SAPLING]) FUEL[id] = 5;
 for (const k of ['pickaxe', 'axe', 'shovel', 'sword']) FUEL['wood_' + k] = 10;
 for (const id of [BLOCK.WOOD, BLOCK.BIRCH_WOOD, BLOCK.SPRUCE_WOOD]) { SMELT[id] = 'charcoal'; SMELT_XP[id] = 0.15; } // 原木を精錬すると木炭
@@ -3533,6 +3900,90 @@ function closeFurnace() {
   render();
   const p = canvasEl.requestPointerLock();
   if (p && p.catch) p.catch(() => {});
+}
+// --- チェスト（27スロットの収納。かまどと同じく座標をキーに中身を持つ）---
+const chests = new Map(); // "x,y,z" -> 27要素の配列（各要素は {id,count,dmg} か null）
+const chestSlots = new Array(27).fill(null); // 開いているチェストの枠
+let chestOpen = false, chestKey = null;
+const chestOv = document.createElement('div');
+chestOv.id = 'chest-overlay';
+chestOv.innerHTML = `<div id="chest-panel"><div id="chest-top"><div class="lbl">チェスト</div><div id="chest-grid"></div></div>
+<div id="chest-store"></div><div id="chest-hot"></div></div><div id="chest-cursor"></div>`;
+document.body.appendChild(chestOv);
+chestOv.addEventListener('contextmenu', e => e.preventDefault());
+const cCursorEl = chestOv.querySelector('#chest-cursor');
+const chestEls = [];
+function mkChestSlot(parent, arr, i) {
+  const el = document.createElement('div');
+  el.className = 'islot';
+  el.addEventListener('mousedown', e => {
+    e.preventDefault();
+    for (const c of [cursorEl, tCursorEl, fCursorEl, cCursorEl]) { c.style.left = e.clientX + 'px'; c.style.top = e.clientY + 'px'; }
+    slotDown(arr, i, e, el);
+  });
+  el.addEventListener('mouseenter', () => {
+    hover = { arr, i };
+    if (dragging && cursor && accept(arr, i, cursor) && (!arr[i] || arr[i].id === cursor.id)
+        && !dragging.list.some(d => d.arr === arr && d.i === i)) {
+      dragging.list.push({ arr, i, el }); el.classList.add('drag');
+    }
+  });
+  el.addEventListener('mouseleave', () => { hover = null; });
+  parent.appendChild(el);
+  chestEls.push({ el, arr, i });
+}
+for (let i = 0; i < 27; i++) mkChestSlot(chestOv.querySelector('#chest-grid'), chestSlots, i);
+for (let i = 9; i < 36; i++) mkChestSlot(chestOv.querySelector('#chest-store'), inv, i);
+for (let i = 0; i < 9; i++) mkChestSlot(chestOv.querySelector('#chest-hot'), inv, i);
+chestOv.addEventListener('mousedown', e => { // パネル外側のクリック: カーソルの物は持ち物へ戻す（入りきらない分は足元に投げる）
+  if (!cursor || e.target.closest('#chest-panel')) return;
+  returnCursorItem(); render();
+});
+function returnCursorItem() {
+  if (!cursor) return;
+  addItem(cursor);
+  if (cursor.count > 0) throwItem(cursor.id, cursor.count, cursor.dmg); // 持ち物がいっぱいでも消えないようにする
+  cursor = null;
+}
+function openChest(x, y, z) {
+  if (invOpen || tableOpen || furnaceOpen || chestOpen) return;
+  if (player.dead || !playing) return;
+  const k = key(x, y, z);
+  let arr = chests.get(k);
+  if (!arr) { arr = new Array(27).fill(null); chests.set(k, arr); }
+  chestKey = k; chestOpen = true;
+  for (let i = 0; i < 27; i++) chestSlots[i] = arr[i];
+  for (const kk in keys) keys[kk] = false;
+  isSprinting = false;
+  chestOv.style.display = 'flex';
+  document.exitPointerLock();
+  render();
+}
+function syncOpenChest() { // 開いている間の枠の中身を、保存用の配列へ書き戻す
+  if (!chestOpen) return;
+  const arr = chests.get(chestKey);
+  if (arr) for (let i = 0; i < 27; i++) arr[i] = chestSlots[i];
+}
+function closeChest() {
+  syncOpenChest();
+  const arr = chests.get(chestKey);
+  if (arr && arr.every(s => !s)) chests.delete(chestKey); // 空のチェストは記録しない
+  chestSlots.fill(null);
+  chestOpen = false; chestKey = null;
+  returnCursorItem();
+  hover = null;
+  chestOv.style.display = 'none';
+  render();
+  const p = canvasEl.requestPointerLock();
+  if (p && p.catch) p.catch(() => {});
+}
+// Shiftクリックでチェストへ入れる用: 既存スタック優先 → 空きの順で target 配列へ収納
+function addToArr(target, st) {
+  for (const pass of [1, 2]) for (let i = 0; i < target.length && st.count > 0; i++) {
+    const t = target[i];
+    if (pass === 1 && t && t.id === st.id) { const n = Math.min(st.count, maxOf(st.id) - t.count); t.count += n; st.count -= n; }
+    if (pass === 2 && !t) { const n = Math.min(st.count, maxOf(st.id)); target[i] = { id: st.id, count: n, dmg: st.dmg }; st.count -= n; }
+  }
 }
 // 精錬の進行。UIの表示に影響する変化（燃料消費・完成）があればtrueを返す
 function tickFurnace(st, inp, fuel, out, dt) {
@@ -3612,7 +4063,7 @@ function accept(arr, i, st) {
   if (arr === furIn) return SMELT[st.id] !== undefined;
   if (arr === furFuel) return FUEL[st.id] !== undefined;
   if (arr === armor) return typeof st.id === 'string' && ITEMS[st.id].armor === i;
-  if (arr === offhand) return typeof st.id === 'string' && !!ITEMS[st.id].off;
+  // オフハンドはJava版準拠で全アイテム（ブロック含む）を持てる
   return true;
 }
 // ------ 形状付きレシピ（配置位置は自由、左右反転もOK） ------
@@ -3626,9 +4077,10 @@ defRecipe(['W'], { W: BLOCK.BIRCH_WOOD }, { id: BLOCK.PLANK, count: 4 });
 defRecipe(['W'], { W: BLOCK.SPRUCE_WOOD }, { id: BLOCK.PLANK, count: 4 });
 defRecipe(['P', 'P'], { P: BLOCK.PLANK }, { id: 'stick', count: 4 });
 defRecipe(['PP', 'PP'], { P: BLOCK.PLANK }, { id: BLOCK.CRAFTING_TABLE, count: 1 });
+defRecipe(['PPP', 'P.P', 'PPP'], { P: BLOCK.PLANK }, { id: BLOCK.CHEST, count: 1 }); // 板材8個を中央を空けて並べる（本家準拠）
 defRecipe(['C', 'S'], { C: 'coal', S: 'stick' }, { id: BLOCK.TORCH, count: 4 }); // 石炭＋棒 → 松明4個（本家準拠）
 defRecipe(['C', 'S'], { C: 'charcoal', S: 'stick' }, { id: BLOCK.TORCH, count: 4 }); // 木炭でも作れる
-[['iron_ingot', 'iron_pickaxe', 'iron_axe', 'iron_shovel'], ['diamond', 'diamond_pickaxe', 'diamond_axe', 'diamond_shovel']].forEach(([mat, pick, axe, shovel]) => {
+[['iron_ingot', 'iron_pickaxe', 'iron_axe', 'iron_shovel'], ['diamond', 'diamond_pickaxe', 'diamond_axe', 'diamond_shovel'], ['gold_ingot', 'gold_pickaxe', 'gold_axe', 'gold_shovel']].forEach(([mat, pick, axe, shovel]) => {
   const key2 = { M: mat, S: 'stick' };
   defRecipe(['MMM', '.S.', '.S.'], key2, { id: pick, count: 1 });
   defRecipe(['MM', 'MS', '.S'], key2, { id: axe, count: 1 });
@@ -3638,6 +4090,9 @@ defRecipe(['C', 'S'], { C: 'charcoal', S: 'stick' }, { id: BLOCK.TORCH, count: 4
 defRecipe(['CCC', 'C.C', 'CCC'], { C: BLOCK.COBBLESTONE }, { id: BLOCK.FURNACE, count: 1 });
 defRecipe(['CC', 'CC'], { C: BLOCK.COBBLESTONE }, { id: BLOCK.BRICK, count: 4 });
 defRecipe(['SS', 'SS'], { S: BLOCK.SAND }, { id: BLOCK.SANDSTONE, count: 1 }); // 砂4個 → 砂岩（本家準拠）
+defRecipe(['SS', 'SS'], { S: 'snowball' }, { id: BLOCK.SNOW_BLOCK, count: 1 }); // 雪玉4個 → 雪ブロック（本家準拠）
+defRecipe(['I.I', '.I.'], { I: 'iron_ingot' }, { id: 'bucket', count: 1 }); // 鉄インゴット3個（V字） → バケツ（本家準拠）
+defRecipe(['PIP', 'PPP', '.P.'], { P: BLOCK.PLANK, I: 'iron_ingot' }, { id: 'shield', count: 1 }); // 板材6＋鉄インゴット1 → 盾（本家準拠）
 for (const m in ARMOR_TIERS) {
   const k2 = { M: ARMOR_TIERS[m].mat };
   defRecipe(['MMM', 'M.M'], k2, { id: m + '_helmet', count: 1 });
@@ -3658,6 +4113,25 @@ for (const m in ARMOR_TIERS) {
   defRecipe(['B'], { B: blk }, { id: it, count: 9 });
 });
 defRecipe(['SS', 'SS'], { S: BLOCK.STONE }, { id: BLOCK.STONE_BRICKS, count: 4 });
+// ------ シェイプレスレシピ（配置不問・材料の種類と個数だけで照合） ------
+const SHAPELESS = [];
+function defShapeless(ids, out) { // ids: 材料IDの配列（同じ材料は個数分並べる）
+  const need = {};
+  ids.forEach(id => { need[id] = (need[id] || 0) + 1; });
+  SHAPELESS.push({ need, total: ids.length, out });
+}
+function matchShapeless(grid) {
+  const have = {}; let total = 0;
+  for (const s of grid) if (s) { have[s.id] = (have[s.id] || 0) + 1; total++; }
+  if (!total) return null;
+  for (const rec of SHAPELESS) {
+    if (rec.total !== total) continue;
+    const keys = Object.keys(have);
+    if (keys.length !== Object.keys(rec.need).length) continue;
+    if (keys.every(k => rec.need[k] === have[k])) return rec.out;
+  }
+  return null;
+}
 function matchRecipe(grid, w) {
   const cells = [];
   grid.forEach((s, i) => { if (s) cells.push([Math.floor(i / w), i % w]); });
@@ -3681,7 +4155,7 @@ function matchRecipe(grid, w) {
       if (ok) return rec.out;
     }
   }
-  return null;
+  return matchShapeless(grid); // 形状付きに該当しなければシェイプレスを照合
 }
 function updateResult() {
   const r = matchRecipe(craft, 2);
@@ -3704,6 +4178,11 @@ const regionOf = (arr, i) => arr === inv ? (i < 9 ? [0, 9] : [9, 36]) : [0, arr.
 function quickMove(arr, i) {
   const st = arr[i];
   if (!st) return;
+  if (chestOpen && arr === inv) { // チェストを開いている間は、持ち物・ホットバーの物をチェストへ送る
+    addToArr(chestSlots, st);
+    if (st.count <= 0) arr[i] = null;
+    return;
+  }
   if (arr === inv) {
     const d = typeof st.id === 'string' ? ITEMS[st.id] : null;
     const t = d && (d.armor !== undefined ? armor : d.off ? offhand : null), ti = d && d.armor !== undefined ? d.armor : 0;
@@ -3746,7 +4225,7 @@ function slotDown(arr, i, e, el) {
   if (arr === furOut) { // かまどの出力を取り出したら、溜まった精錬の経験値を受け取る
     const before = arr[0] ? arr[0].count : 0;
     slotDown2(arr, i, e, el, prev, now, right);
-    if (before && (!arr[0] || arr[0].count < before)) { const fst = furnaces.get(furnaceKey); if (fst && fst.xp) { addXpFrac(fst.xp); fst.xp = 0; } }
+    if (before && (!arr[0] || arr[0].count < before)) { const fst = furnaces.get(furnaceKey); if (fst && fst.xp) { spawnXpOrbs(xpRound(fst.xp), player.pos.x, player.pos.y + 0.6, player.pos.z); fst.xp = 0; } }
     return;
   }
   return slotDown2(arr, i, e, el, prev, now, right);
@@ -3763,7 +4242,7 @@ function slotDown2(arr, i, e, el, prev, now, right) {
   }
   if (cursor && prev.pick && prev.arr === arr && prev.i === i && now - prev.t < 300 && !right) {
     // ダブルクリック: 同じアイテムを全てカーソルに集める
-    for (const a of [inv, craft, tcraft]) for (let k = 0; k < a.length; k++) {
+    for (const a of [inv, craft, tcraft, chestSlots]) for (let k = 0; k < a.length; k++) {
       const s = a[k];
       if (s && s.id === cursor.id && cursor.count < maxOf(s.id)) {
         const n = Math.min(s.count, maxOf(s.id) - cursor.count);
@@ -3837,6 +4316,7 @@ function hoverSwap(n) {
   render();
 }
 function render() {
+  updateOffhandHud();
   updateCreativePalette();
   updateResult();
   for (const { el, arr, i } of invEls) el.innerHTML = iconHTML(arr[i]);
@@ -3849,11 +4329,16 @@ function render() {
   for (const { el, arr, i } of furEls) el.innerHTML = iconHTML(arr[i]);
   fCursorEl.innerHTML = iconHTML(cursor);
   fCursorEl.style.display = cursor ? 'flex' : 'none';
+  if (chestOpen) {
+    for (const { el, arr, i } of chestEls) el.innerHTML = iconHTML(arr[i]);
+    cCursorEl.innerHTML = iconHTML(cursor);
+    cCursorEl.style.display = cursor ? 'flex' : 'none';
+  }
   syncHotbar(true);
 }
 function toggleInv() {
   if (invOpen) return closeInv();
-  if (tableOpen || furnaceOpen) return;
+  if (tableOpen || furnaceOpen || chestOpen) return;
   if (player.dead || !playing) return;
   invOpen = true;
   for (const k in keys) keys[k] = false;
@@ -3873,28 +4358,48 @@ function closeInv() {
   const p = canvasEl.requestPointerLock();
   if (p && p.catch) p.catch(() => {});
 }
-let hudHidden = false, shotRequested = false;
+let hudHidden = false, shotRequested = false, f3Used = false, debugOn = false, hitboxOn = false;
 window.addEventListener('keydown', e => {
   if (e.code === 'F1' && !e.repeat) { e.preventDefault(); if (playing) { hudHidden = !hudHidden; document.body.classList.toggle('nohud', hudHidden); } return; }
   if (e.code === 'F2' && !e.repeat) { e.preventDefault(); if (playing) shotRequested = true; return; }
-  if (e.code === 'F3') { f3 = true; e.preventDefault(); }
+  if (e.code === 'F3') { if (!f3) f3Used = false; f3 = true; e.preventDefault(); }
+  if (f3 && (e.code === 'KeyH' || e.code === 'KeyG' || e.code === 'KeyT' || e.code === 'KeyY' || e.code === 'KeyB')) f3Used = true; // F3+キーのコンボ時は表示を切り替えない
   if (e.code === 'KeyH' && f3) { advTip = !advTip; e.preventDefault(); }
   if (e.code === 'KeyG' && f3 && !e.repeat) { setGameMode(gameMode === 'creative' ? 'survival' : 'creative'); e.preventDefault(); }
   if (e.code === 'KeyT' && f3 && !e.repeat) { dayTime = ((Math.floor(dayTime * 4) + 1) / 4) % 1; e.preventDefault(); }
   if (e.code === 'KeyY' && f3 && !e.repeat) { timeFrozen = !timeFrozen; showItemName(timeFrozen ? '時間停止' : '時間再開'); e.preventDefault(); }
-  if (e.code === 'KeyE' && !e.repeat) { if (furnaceOpen) closeFurnace(); else if (tableOpen) closeTable(); else toggleInv(); }
+  if (e.code === 'KeyB' && f3 && !e.repeat) { hitboxOn = !hitboxOn; showItemName(hitboxOn ? '当たり判定: 表示' : '当たり判定: 非表示'); e.preventDefault(); }
+  if (e.code === 'KeyE' && !e.repeat) { if (chestOpen) closeChest(); else if (furnaceOpen) closeFurnace(); else if (tableOpen) closeTable(); else toggleInv(); }
   if (e.code === 'Escape' && invOpen) closeInv();
   if (e.code === 'Escape' && tableOpen) closeTable();
   if (e.code === 'Escape' && furnaceOpen) closeFurnace();
+  if (e.code === 'Escape' && chestOpen) closeChest();
   if (e.code === 'KeyQ' && !e.repeat) {
     e.preventDefault();
     if (invOpen) { if (hover && hover.arr !== result) dropFrom(hover.arr, hover.i, e.ctrlKey); }
     else if (tableOpen) { if (hover && hover.arr !== tresult) dropFrom(hover.arr, hover.i, e.ctrlKey); }
     else if (furnaceOpen) { if (hover) dropFrom(hover.arr, hover.i, e.ctrlKey); }
+    else if (chestOpen) { if (hover) dropFrom(hover.arr, hover.i, e.ctrlKey); }
     else if (locked && !player.dead) dropFrom(inv, selectedSlot, e.ctrlKey);
   }
+  // Fキー: メインハンドとオフハンドを入れ替え（UIを開いている間・F3押下中・死亡中は無効）
+  if (e.code === 'KeyF' && !e.repeat && !f3 && locked && playing && !player.dead && !invOpen && !tableOpen && !furnaceOpen && !chestOpen) {
+    e.preventDefault();
+    const a = inv[selectedSlot], b = offhand[0];
+    if (a || b) {
+      inv[selectedSlot] = b; offhand[0] = a;
+      render();
+      syncHotbar(true);
+      const st = inv[selectedSlot];
+      showItemName(st ? nameOf(st.id) : '');
+    }
+  }
 });
-window.addEventListener('keyup', e => { if (e.code === 'F3') f3 = false; });
+window.addEventListener('keyup', e => {
+  if (e.code !== 'F3') return;
+  if (f3 && !f3Used && playing) { debugOn = !debugOn; document.body.classList.toggle('debug', debugOn); } // F3単独の押して離しで切替
+  f3 = false; f3Used = false;
+});
 window.addEventListener('mousemove', e => {
   if (invOpen) {
     cursorEl.style.left = e.clientX + 'px'; cursorEl.style.top = e.clientY + 'px';
@@ -3910,6 +4415,9 @@ window.addEventListener('mousemove', e => {
   }
   if (furnaceOpen) {
     fCursorEl.style.left = e.clientX + 'px'; fCursorEl.style.top = e.clientY + 'px';
+  }
+  if (chestOpen) {
+    cCursorEl.style.left = e.clientX + 'px'; cCursorEl.style.top = e.clientY + 'px';
   }
 });
 const itemNameEl = document.getElementById('item-name-display');
@@ -3932,8 +4440,11 @@ player.health = VITALS.maxHealth;
 player.hunger = VITALS.maxHunger;
 player.oxygen = VITALS.maxOxygen;
 player.underwater = false; // 完全に水没している間 true（HUDの満腹度⇔酸素ゲージの切り替えに使う）
+player.burn = 0;     // 燃えている残り時間(秒)。溶岩に触れると15秒になり、水に入ると消える
+player.burnTick = 0; // 燃焼ダメージ（毎秒1）用のタイマー
 player.xpLevel = 0;
 player.xpProgress = 0; // 0〜1（画像に合わせ、初期状態でも少しだけ緑のバーが見えるようにしておく）
+player.xpTotal = 0;    // 今の命で集めた経験値の累計（死亡画面のスコア。死亡でレベルと一緒に0へ戻る）
 
 const healthIconsEl = document.getElementById('health-icons');
 const hungerIconsEl = document.getElementById('hunger-icons');
@@ -4017,8 +4528,11 @@ renderVitals();
 // ------ 経験値（本家準拠: 次のレベルまでの必要量） ------
 // 0〜15: 2L+7 / 16〜30: 5L-38 / 31〜: 9L-158
 function xpToNext(L) { return L <= 15 ? 2 * L + 7 : L <= 30 ? 5 * L - 38 : 9 * L - 158; }
+// レベルLに到達するまでの累計経験値（本家の式）。累計を持たない古いセーブからの復元に使う
+function xpAtLevel(L) { return L <= 16 ? L * L + 6 * L : L <= 31 ? 2.5 * L * L - 40.5 * L + 360 : 4.5 * L * L - 162.5 * L + 2220; }
 function addXp(n) {
   if (gameMode !== 'survival' || !(n > 0)) return;
+  player.xpTotal = (player.xpTotal || 0) + n;
   let need = xpToNext(player.xpLevel), prog = player.xpProgress * need + n, up = false;
   while (prog >= need) { prog -= need; player.xpLevel++; need = xpToNext(player.xpLevel); up = true; }
   player.xpProgress = prog / need;
@@ -4026,11 +4540,13 @@ function addXp(n) {
   renderVitals();
 }
 // 小数の経験値は、整数部分＋小数部分の確率で1点（本家と同じ丸め）
-function addXpFrac(x) { addXp(Math.floor(x) + (Math.random() < x - Math.floor(x) ? 1 : 0)); }
+function xpRound(x) { return Math.floor(x) + (Math.random() < x - Math.floor(x) ? 1 : 0); }
 // 鉱石採掘の経験値（本家: 石炭0〜2 / ダイヤ3〜7）。鉄・金鉱石は掘っても出ない（精錬で入る）
 function oreXp(id) {
   if (id === BLOCK.COAL_ORE) return Math.floor(Math.random() * 3);
   if (id === BLOCK.DIAMOND_ORE) return 3 + Math.floor(Math.random() * 5);
+  if (id === BLOCK.LAPIS_ORE) return 2 + Math.floor(Math.random() * 4);
+  if (id === BLOCK.REDSTONE_ORE) return 1 + Math.floor(Math.random() * 5);
   return 0;
 }
 
@@ -4101,7 +4617,26 @@ function touchingCactus(pos) {
   }
   return false;
 }
-function applyDamage(rawAmount, causeText) {
+// ------ 被ダメージ時のカメラの傾き（ヒットチルト） ------
+// 約0.3秒。素早く傾いて滑らかに戻る。攻撃元がある時はその方向で向きが決まる
+const hitTilt = { start: -10, sign: 1 };
+const HIT_TILT_DUR = 0.3, HIT_TILT_DEG = 7;
+function startHitTilt(src) {
+  hitTilt.start = performance.now() / 1000;
+  if (src) {
+    const dx = src.x - player.pos.x, dz = src.z - player.pos.z;
+    const side = dx * Math.cos(player.yaw) - dz * Math.sin(player.yaw); // 視点の右側にいるほど正
+    hitTilt.sign = side >= 0 ? 1 : -1;
+  } else hitTilt.sign = 1; // 攻撃元がない（落下・溶岩など）は固定の向き
+}
+function hitTiltAngle() { // ラジアン。傾いていなければ0
+  const e = performance.now() / 1000 - hitTilt.start;
+  if (e < 0 || e >= HIT_TILT_DUR) return 0;
+  const rise = 0.07;
+  const k = e < rise ? e / rise : Math.pow(1 - (e - rise) / (HIT_TILT_DUR - rise), 2);
+  return hitTilt.sign * k * HIT_TILT_DEG * Math.PI / 180;
+}
+function applyDamage(rawAmount, causeText, srcPos) {
   if (player.dead || rawAmount < 1 || gameMode === 'creative') return;
 
   const now = performance.now() / 1000;
@@ -4112,6 +4647,7 @@ function applyDamage(rawAmount, causeText) {
   }
   player.lastDamageAmount = rawAmount;
   player.invincibleUntil = now + INVINCIBILITY_DURATION;
+  startHitTilt(srcPos);
 
   player.health = Math.max(0, player.health - amount);
   if (player.health > 0) SFX.hurt(); else SFX.death();
@@ -4129,6 +4665,7 @@ function applyDamage(rawAmount, causeText) {
 function dropAllItemsOnDeath() {
   if (gameMode === 'creative') return;
   // 開いているインベントリ等は、ポインターロックを要求せずにその場で閉じる
+  if (chestOpen) { syncOpenChest(); chestSlots.fill(null); chestOpen = false; chestKey = null; chestOv.style.display = 'none'; }
   if (furnaceOpen) {
     const fst = furnaces.get(furnaceKey);
     if (fst) { fst.inp[0] = furIn[0]; fst.fuel[0] = furFuel[0]; fst.out[0] = furOut[0]; }
@@ -4160,8 +4697,14 @@ function triggerDeath(causeText) {
   dropAllItemsOnDeath();
   releasePointerLock();
   deathCauseEl.textContent = causeText || '死んでしまった';
-  deathScoreValueEl.textContent = '0'; // このゲームにはまだスコア制度が無いため、常に0を表示する
+  // スコア = 今の命で集めた経験値の累計。本家同様、死亡でレベルと経験値バーは0に戻る
+  // （経験値オーブとして落とす処理は「経験値オーブ」項目の後で追加する）
+  deathScoreValueEl.textContent = String(Math.floor(player.xpTotal || 0));
+  player.xpLevel = 0; player.xpProgress = 0; player.xpTotal = 0;
+  renderVitals();
   deathVignetteEl.classList.add('show');
+  player.burn = 0; player.burnTick = 0;
+  document.getElementById('fire-overlay').classList.remove('show');
   // 「死んでしまった！」の文字と選択肢は、Wiki記載のカメラ演出（傾き・震え・ズームイン）が
   // 見えるよう少し間を置いてから表示する
   setTimeout(() => { if (player.dead) deathScreenEl.classList.add('show'); }, 900);
@@ -4180,6 +4723,7 @@ function respawnPlayer() {
   generateChunkSync(...worldToChunk(3, -6)); // リスポーン地点のチャンクが未生成なら生成しておく
   player.pos.set(3, findSafeSpawnY(3, -6), -6);
   player.fallStartY = player.pos.y;
+  hitTilt.start = -10;
   camera.rotation.z = 0;
   camera.fov = BASE_FOV;
   camera.updateProjectionMatrix();
@@ -4282,7 +4826,7 @@ let heldPose = BLOCK_POSE;
 // ------ 道具の3Dドット絵（ツルハシ・斧・シャベル。ティア色の頭＋木の柄） ------
 // 16x16のドット絵を作り、色つきの薄い立体（前後の面と、隣が空のドットの側面）として一人称視点に出す。
 const TOOL_PX = 0.05; // 1ドットの大きさ（16ドットで0.8）
-function toolPixels(type, tier) {
+function toolPixels(type, mat) {
   const grid = Array.from({ length: 16 }, () => Array(16).fill(null));
   const HANDLE = ['#8a6a3a', '#6b4c2a'];
   for (let k = 0; k < 11; k++) grid[14 - k][1 + k] = HANDLE[k % 2]; // 左下から右上へ伸びる柄
@@ -4296,7 +4840,7 @@ function toolPixels(type, tier) {
   const pts = HEADS[type];
   const set = new Set(pts.map(([x, y]) => x + ',' + y));
   const has = (x, y) => set.has(x + ',' + y);
-  const base = new THREE.Color(TIER_COLORS[tier]);
+  const base = new THREE.Color(TIER_COLORS[mat]);
   for (const [x, y] of pts) {
     let k = 1;
     if (!has(x + 1, y) || !has(x, y + 1)) k = 0.72;         // 右・下の縁は暗く
@@ -4308,10 +4852,15 @@ function toolPixels(type, tier) {
   return grid;
 }
 const toolGeoCache = new Map();
-function getToolGeometry(type, tier) {
-  const ck = type + tier;
+function getToolGeometry(type, mat) {
+  const ck = type + mat;
   if (toolGeoCache.has(ck)) return toolGeoCache.get(ck);
-  const grid = toolPixels(type, tier);
+  const geo = gridGeometry(toolPixels(type, mat));
+  toolGeoCache.set(ck, geo);
+  return geo;
+}
+// 16x16のドット絵(色 or null)から、薄い立体ジオメトリを作る（道具・盾で共用）
+function gridGeometry(grid) {
   const pos = [], col = [], idx = [];
   const s = TOOL_PX, h = s * 0.7; // 厚みは約1.4ドット
   const tc = new THREE.Color();
@@ -4339,8 +4888,37 @@ function getToolGeometry(type, tier) {
   geo.setAttribute('color', new THREE.Float32BufferAttribute(col, 3));
   geo.setIndex(idx);
   geo.computeBoundingSphere();
-  toolGeoCache.set(ck, geo);
   return geo;
+}
+
+// ------ 盾の3Dドット絵（木の板＋鉄の縁＋中央の鉄の盛り上がり） ------
+function shieldPixels() {
+  const grid = Array.from({ length: 16 }, () => Array(16).fill(null));
+  const HW = [0, 6, 6, 6, 6, 6, 6, 6, 6, 5, 5, 4, 3, 2, 1, 0]; // 行ごとの半幅（下に向かって尖る）
+  const inside = (x, y) => y >= 1 && y <= 14 && x >= 8 - HW[y] && x <= 7 + HW[y];
+  for (let y = 1; y <= 14; y++) {
+    for (let x = 0; x < 16; x++) {
+      if (!inside(x, y)) continue;
+      const edge = !inside(x - 1, y) || !inside(x + 1, y) || !inside(x, y - 1) || !inside(x, y + 1);
+      if (edge) grid[y][x] = (!inside(x + 1, y) || !inside(x, y + 1)) ? '#8f8f98' : '#d0d0d8'; // 右・下の縁は暗く
+      else if (x >= 7 && x <= 8 && y >= 5 && y <= 6) grid[y][x] = '#d6d6dc';                    // 中央の鉄の盛り上がり
+      else grid[y][x] = (x % 2 === 0) ? '#a07a45' : '#8a6a3a';                                  // 縦の板目
+    }
+  }
+  return grid;
+}
+function getShieldGeometry() {
+  if (!toolGeoCache.has('shield')) toolGeoCache.set('shield', gridGeometry(shieldPixels()));
+  return toolGeoCache.get('shield');
+}
+// 盾のポーズ。sr=構え量(0〜1)で、体の横 → 画面中央寄りに持ち上げる。mirror=true は右手（メイン）用の左右反転
+function shieldPose(sr, mirror) {
+  const m = mirror ? -1 : 1, L = (a, b) => a + (b - a) * sr;
+  return {
+    pos: [m * L(-0.55, -0.2), L(-0.5, -0.28), L(-0.95, -0.85)],
+    rot: [L(0.1, 0.0), m * L(0.55, 0.05), m * L(0.1, 0.0)],
+    swing: [-0.3, m * 0.2, m * -0.2]
+  };
 }
 // 道具は光の影響を受けすぎないよう、空の明るさに合わせて全体の明るさだけ変える
 const heldToolMat = new THREE.MeshBasicMaterial({ vertexColors: true, depthTest: false, transparent: true });
@@ -4358,9 +4936,19 @@ function updateHeldItemMesh() {
   const st = inv[selectedSlot];
   lastHeld = st ? st.id : null;
   // 道具（ツルハシ・斧・シャベル）: ティア色の3Dドット絵を持たせる
+  if (st && st.id === 'shield') { // 盾: 専用の3Dドット絵（構え中は持ち上がる）
+    heldItemMesh = new THREE.Mesh(getShieldGeometry(), heldToolMat);
+    heldItemMesh.userData.tool = true; heldItemMesh.userData.shield = true; // 明るさ調整・破棄回避は道具と同じ扱い
+    heldItemMesh.renderOrder = 998;
+    heldItemMesh.frustumCulled = false;
+    heldItemGroup.add(heldItemMesh);
+    heldItemGroup.visible = true;
+    armMesh.visible = false;
+    return;
+  }
   const tool = st && typeof st.id === 'string' ? ITEMS[st.id].tool : null;
   if (tool) {
-    heldItemMesh = new THREE.Mesh(getToolGeometry(tool.type, tool.tier), heldToolMat);
+    heldItemMesh = new THREE.Mesh(getToolGeometry(tool.type, tool.mat), heldToolMat);
     heldItemMesh.userData.tool = true;
     heldItemMesh.renderOrder = 998;
     heldItemMesh.frustumCulled = false;
@@ -4396,12 +4984,87 @@ function updateHeldItemMesh() {
 }
 updateHeldItemMesh();
 
+// ------ 左手（オフハンド）の一人称表示 ------
+// 本家準拠: オフハンドに物があるときだけ左手側にも表示する（空なら見えない）。
+// ブロック・道具は右手と同じく手の代わりに左右反転した位置へ表示し、それ以外の物は左腕を見せる。
+// 振るアニメはオフハンドを使った時（右クリックでの設置・食事）だけ左手が動く。
+var usingOffhand = false, offSwingProgress = 1, offItemMesh = null, lastOffId;
+var offArmGroup = new THREE.Group();
+offArmGroup.position.set(-0.78, -0.7, -0.85);
+offArmGroup.rotation.set(0.15, 0.3, -0.5);
+camera.add(offArmGroup);
+var offArmMesh = new THREE.Mesh(armGeo, armMat);
+offArmMesh.position.set(0, 0, -0.35);
+offArmMesh.renderOrder = 998;
+offArmGroup.add(offArmMesh);
+var offItemGroup = new THREE.Group();
+offItemGroup.position.set(-0.75, -0.72, -0.85);
+camera.add(offItemGroup);
+offArmGroup.visible = false; offItemGroup.visible = false;
+const OFF_BLOCK_POSE = { pos: [-0.75, -0.72, -0.85], rot: [0.4, -0.8, -0.2],  swing: [-0.55, 0.35, -1.1] };
+const OFF_TOOL_POSE  = { pos: [-0.6, -0.5, -0.9],    rot: [0.15, 0.45, 0.15], swing: [-0.9, 0.3, -0.5] };
+let offPose = OFF_BLOCK_POSE;
+function updateOffhandMesh() {
+  if (!offItemGroup) return;
+  const st = offhand[0], id = st ? st.id : null;
+  if (id === lastOffId) return;
+  lastOffId = id;
+  if (offItemMesh) {
+    offItemGroup.remove(offItemMesh);
+    if (!offItemMesh.userData.tool) { // 道具のジオメトリ・マテリアルは右手と共有なので破棄しない
+      offItemMesh.geometry.dispose();
+      if (Array.isArray(offItemMesh.material)) offItemMesh.material.forEach(m => m.dispose());
+      else offItemMesh.material.dispose();
+    }
+    offItemMesh = null;
+  }
+  offArmGroup.visible = false; offItemGroup.visible = false;
+  if (!st) return; // 空: 左手は見えない
+  if (id === 'shield') { // 盾: 専用の3Dドット絵（左手側）
+    offItemMesh = new THREE.Mesh(getShieldGeometry(), heldToolMat);
+    offItemMesh.userData.tool = true; offItemMesh.userData.shield = true;
+    offItemMesh.renderOrder = 998;
+    offItemMesh.frustumCulled = false;
+    offItemGroup.add(offItemMesh);
+    offItemGroup.visible = true;
+    return;
+  }
+  const tool = typeof id === 'string' ? ITEMS[id].tool : null;
+  if (tool) {
+    offItemMesh = new THREE.Mesh(getToolGeometry(tool.type, tool.mat), heldToolMat);
+    offItemMesh.userData.tool = true;
+    offItemMesh.renderOrder = 998;
+    offItemMesh.frustumCulled = false;
+    offItemGroup.add(offItemMesh);
+    offPose = OFF_TOOL_POSE;
+    offItemGroup.visible = true;
+    return;
+  }
+  if (typeof id === 'number' && id !== BLOCK.AIR) {
+    const mats = getMaterials(id).map(m => {
+      const clone = m.clone();
+      patchLit(clone);
+      clone.depthTest = false;
+      clone.transparent = true;
+      return clone;
+    });
+    offItemMesh = new THREE.Mesh(new THREE.BoxGeometry(0.42, 0.42, 0.42), mats);
+    offItemMesh.renderOrder = 998;
+    offItemGroup.add(offItemMesh);
+    offPose = OFF_BLOCK_POSE;
+    offItemGroup.visible = true;
+    return;
+  }
+  offArmGroup.visible = true; // ブロックでも道具でもない物（食料など）: 左腕を見せる
+}
+updateOffhandMesh();
+
 // ------ 腕を振るアニメーション（ブロックを壊す/置くとき、反時計回りに振る） ------
 let armSwingProgress = 1; // 0=振り始め ... 1=静止状態（1で正常なポーズに戻る）
 const ARM_SWING_DURATION = 0.28; // 秒
 
 function triggerArmSwing() {
-  armSwingProgress = 0;
+  if (usingOffhand) offSwingProgress = 0; else armSwingProgress = 0; // オフハンドを使った時は左手を振る
 }
 
 function updateArmSwing(dt) {
@@ -4427,11 +5090,25 @@ function updateArmSwing(dt) {
 
   // アイテムを持っている場合はheldItemGroup（camera直下、独立配置）も同じ勢いで振る
   if (heldItemGroup.visible) {
-    const p = heldPose;
+    const p = (heldItemMesh && heldItemMesh.userData.shield) ? shieldPose(shieldHand() === 'main' ? shieldRaise : 0, true) : heldPose;
     heldItemGroup.rotation.set(p.rot[0] + p.swing[0] * swing, p.rot[1] + p.swing[1] * swing, p.rot[2] + p.swing[2] * swing);
     heldItemGroup.position.set(p.pos[0] + bobX, p.pos[1] + bobY, p.pos[2] + swing * 0.15);
     // 道具は空の明るさに合わせて暗くする（夜は暗く、真っ暗にはしない）
     if (heldItemMesh && heldItemMesh.userData.tool) heldToolMat.color.setScalar(Math.max(0.4, lightUniforms.uSky.value));
+  }
+  // 左手（オフハンド）: 歩きの揺れは右手と同じ、振りはオフハンドを使った時だけ
+  if (offSwingProgress < 1) offSwingProgress = Math.min(1, offSwingProgress + dt / ARM_SWING_DURATION);
+  const ot = offSwingProgress, os = Math.sin(ot * Math.PI) * (1 - ot * 0.15);
+  if (offArmGroup.visible) {
+    const sr = shieldHand() === 'off' ? shieldRaise : 0; // 盾を構えている間は左手を中央へ持ち上げる
+    offArmGroup.rotation.set(0.15 - os * 0.55 - sr * 0.5, 0.3 + os * 0.35 + sr * 0.6, -0.5 - os * 1.1 + sr * 0.5);
+    offArmGroup.position.set(-0.78 + bobX + sr * 0.45, -0.7 + bobY + sr * 0.3, -0.85 + os * 0.15);
+  }
+  if (offItemGroup.visible) {
+    const q = (offItemMesh && offItemMesh.userData.shield) ? shieldPose(shieldHand() === 'off' ? shieldRaise : 0, false) : offPose;
+    offItemGroup.rotation.set(q.rot[0] + q.swing[0] * os, q.rot[1] + q.swing[1] * os, q.rot[2] + q.swing[2] * os);
+    offItemGroup.position.set(q.pos[0] + bobX, q.pos[1] + bobY, q.pos[2] + os * 0.15);
+    if (offItemMesh && offItemMesh.userData.tool) heldToolMat.color.setScalar(Math.max(0.4, lightUniforms.uSky.value));
   }
 }
 
@@ -4439,7 +5116,8 @@ function updateArmSwing(dt) {
 // ずらしたまま放置すると、ブロックの狙いや設置位置（レイキャスト）まで揺れてしまうため
 const bobSaved = { x: 0, y: 0, z: 0, rx: 0, rz: 0 };
 function applyViewBob() {
-  if (player.dead || !locked || viewBob.amt < 0.0005) return false;
+  const tilt = hitTiltAngle();
+  if (player.dead || !locked || (viewBob.amt < 0.0005 && tilt === 0)) return false;
   bobSaved.x = camera.position.x; bobSaved.y = camera.position.y; bobSaved.z = camera.position.z;
   bobSaved.rx = camera.rotation.x; bobSaved.rz = camera.rotation.z;
   const a = viewBob.dist * Math.PI, amt = viewBob.amt, DEG = Math.PI / 180;
@@ -4449,6 +5127,7 @@ function applyViewBob() {
   camera.position.y += -Math.abs(Math.cos(a) * amt);          // 上下（一歩ごとに沈む）
   camera.rotation.z = Math.sin(a) * amt * 3 * DEG;            // わずかな傾き
   camera.rotation.x += Math.abs(Math.cos(a - 0.2) * amt) * 5 * DEG;
+  camera.rotation.z += tilt;                                  // 被ダメージ時の傾き
   return true;
 }
 function restoreViewBob() {
@@ -4574,6 +5253,7 @@ const SFX = (() => {
       noise({ dur: 0.38, vol: 0.45 * scale, type: 'bandpass', freq: 1400, freq2: 500, q: 0.6, attack: 0.02 });
       noise({ dur: 0.55, vol: 0.3 * scale, type: 'lowpass', freq: 500, q: 0.4, attack: 0.03 });
     },
+    fizz() { noise({ dur: 0.5, vol: 0.28, type: 'highpass', freq: 3000, freq2: 1500, q: 0.8, attack: 0.02 }); tone({ freq: 500, freq2: 200, dur: 0.15, vol: 0.1 }); },
     bird() { const b = 1800 + Math.random() * 1200; for (let i = 0; i < 2 + (Math.random() * 3 | 0); i++) tone({ freq: b, freq2: b * 1.4, dur: 0.07, vol: 0.07, delay: i * 0.11 }); },
     cave() {
       if (Math.random() < 0.5) { noise({ dur: 1.6, vol: 0.12, type: 'lowpass', freq: 260, freq2: 120, q: 0.5, attack: 0.4 }); tone({ freq: 70, freq2: 45, dur: 1.6, vol: 0.08, attack: 0.5 }); }
@@ -4589,6 +5269,10 @@ const SFX = (() => {
         if (Math.random() < 0.35) tone({ freq: sc[i] / 2, dur: 3, vol: 0.04, attack: 0.05, delay: t, lp: 900 });
         t += 0.6 + Math.random() * 1.1;
       }
+    },
+    shieldBlock() {
+      noise({ dur: 0.08, vol: 0.3, type: 'bandpass', freq: 1800 });
+      tone({ freq: 220, freq2: 150, dur: 0.12, vol: 0.25, type: 'square', lp: 1500 });
     },
     toolBreak() {
       noise({ dur: 0.18, vol: 0.4, type: 'highpass', freq: 3000 });
@@ -4609,7 +5293,7 @@ function sfxMat(id) {
     case BLOCK.GLASS: return 'glass';
     case BLOCK.ICE: return 'ice';
     case BLOCK.IRON_BLOCK: case BLOCK.GOLD_BLOCK: case BLOCK.DIAMOND_BLOCK: return 'metal';
-    case BLOCK.WOOD: case BLOCK.BIRCH_WOOD: case BLOCK.SPRUCE_WOOD: case BLOCK.PLANK: case BLOCK.CRAFTING_TABLE: case BLOCK.TORCH: case BLOCK.BOOKSHELF: return 'wood';
+    case BLOCK.WOOD: case BLOCK.BIRCH_WOOD: case BLOCK.SPRUCE_WOOD: case BLOCK.PLANK: case BLOCK.CRAFTING_TABLE: case BLOCK.TORCH: case BLOCK.BOOKSHELF: case BLOCK.CHEST: return 'wood';
     default: return 'stone';
   }
 }
@@ -4792,6 +5476,64 @@ canvasEl.addEventListener('mousedown', e => {
   if (e.button === 1) { e.preventDefault(); pickBlock(); return; } // 中クリック: ピックブロック
   if (e.button !== 2) return;
   mouseRight = true;
+  // 二刀流（本家準拠）: メインハンドの物が使えないとき（空・道具など）だけ、オフハンドの物を使う
+  if (useOffhand()) offhandSwapped(rightClickUse, true); else rightClickUse();
+});
+// 手に持っている物が右クリックで使えるか（ブロック・防具・バケツ・食べられる状態の食料）
+function handUsable(st) {
+  if (!st) return false;
+  if (typeof st.id === 'number') return st.id !== BLOCK.AIR;
+  const d = ITEMS[st.id];
+  if (d.armor !== undefined) return true;
+  if (st.id === 'bucket' || st.id === 'water_bucket' || st.id === 'lava_bucket') return true;
+  if (st.id === 'snowball') return true; // 雪玉は投げられる
+  if (d.food) return gameMode !== 'creative' && player.hunger < VITALS.maxHunger;
+  return false;
+}
+// メインハンドの物が「今この瞬間に実際に使える」か（持っているだけでなく、狙った先に対して作用できるか）
+//  ・防具・雪玉・食料（食べられる状態）: 常に使える
+//  ・作業台・かまどを狙っているとき: 画面を開くので使える
+//  ・ブロック: 狙った先に置けるときだけ（空を向いている・自分の体と重なる・植物の地面が無い等は使えない）
+//  ・空のバケツ: 汲める水源があるとき / 水・溶岩入りバケツ: 狙った先があるとき
+const _actDir = new THREE.Vector3();
+function mainHandActs() {
+  const st = inv[selectedSlot];
+  if (!handUsable(st)) return false;
+  const id = st.id;
+  if (typeof id === 'string' && id !== 'bucket' && id !== 'water_bucket' && id !== 'lava_bucket') return true;
+  camera.getWorldDirection(_actDir);
+  if (id === 'bucket' && raycastFluidSource(camera.position, _actDir, 6)) return true;
+  const hit = raycastVoxel(camera.position, _actDir, 7);
+  if (!hit) return false;
+  const hid = getBlock(hit.x, hit.y, hit.z);
+  if (hid === BLOCK.CRAFTING_TABLE || hid === BLOCK.FURNACE || hid === BLOCK.CHEST) return true;
+  if (typeof id === 'string') return id !== 'bucket';
+  return !!placeTarget(hit, id);
+}
+// メインハンドが優先。メインハンドの物が使えないときだけオフハンドを使う
+function useOffhand() { return handUsable(offhand[0]) && !mainHandActs(); }
+// オフハンドの物を一時的に「持っている枠」へ入れ替えて既存の使用処理を流用し、終わったら元へ戻す
+function offhandSwapped(fn, force) {
+  const main = inv[selectedSlot], off = offhand[0];
+  const mainCount = main ? main.count : 0, offCount = off ? off.count : 0;
+  inv[selectedSlot] = off; offhand[0] = main;
+  hotbarBlocks[selectedSlot] = off && typeof off.id === 'number' ? off.id : BLOCK.AIR;
+  usingOffhand = true;
+  try { fn(); } finally {
+    usingOffhand = false;
+    const nowOff = inv[selectedSlot];
+    inv[selectedSlot] = offhand[0]; offhand[0] = nowOff;
+    const changed = force || nowOff !== off || (nowOff && nowOff.count !== offCount) || inv[selectedSlot] !== main || (main && main.count !== mainCount);
+    if (changed) { syncHotbar(true); render(); }
+    else hotbarBlocks[selectedSlot] = main && typeof main.id === 'number' ? main.id : BLOCK.AIR;
+    updateOffhandMesh(); // 入れ替え中に作られた左手の見た目を実際の中身へ戻す
+  }
+}
+function rightClickUse() {
+  if (throwSnowball()) return; // 雪玉を持っているときは投げる（ブロックは置かない）
+  if (equipHeldArmor()) return; // 防具を持っているときは装備（ブロックは置かない）
+  const bk = heldBucket();
+  if (bk === 'bucket' && scoopFluid()) { placeCooldown = PLACE_REPEAT_INTERVAL; return; } // 空のバケツ: 流体の水源を汲む
   const dir = new THREE.Vector3();
   camera.getWorldDirection(dir);
   const hit = raycastVoxel(camera.position, dir, 7);
@@ -4800,9 +5542,94 @@ canvasEl.addEventListener('mousedown', e => {
   const hitId = getBlock(hit.x, hit.y, hit.z);
   if (hitId === BLOCK.CRAFTING_TABLE) { openTable(); return; }
   if (hitId === BLOCK.FURNACE) { openFurnace(hit.x, hit.y, hit.z); return; }
+  if (hitId === BLOCK.CHEST) { openChest(hit.x, hit.y, hit.z); return; }
+  if (bk) { // 水入り・溶岩入りバケツは流体を置く（空のバケツで汲めなかったときは何もしない）
+    if (bk !== 'bucket') placeBucketFluid(hit, bk);
+    placeCooldown = PLACE_REPEAT_INTERVAL;
+    return;
+  }
   tryPlaceBlock(hit);
   placeCooldown = PLACE_REPEAT_INTERVAL;
-});
+}
+
+// ------ バケツ（本家準拠） ------
+//  ・空のバケツで水・溶岩の「水源」を右クリックすると汲み取り、水入り／溶岩入りバケツになる（流れている流体は汲めない）
+//  ・水入り／溶岩入りバケツを右クリックすると、狙ったブロックの隣（植物なら置き換え）に水源として置き、空のバケツへ戻る
+//  ・クリエイティブでは消費しない。置いた流体は既存の流動・水と溶岩の反応・保存の仕組みがそのまま処理する
+function heldBucket() {
+  const st = inv[selectedSlot];
+  return st && (st.id === 'bucket' || st.id === 'water_bucket' || st.id === 'lava_bucket') ? st.id : null;
+}
+// 視線の先の最初の流体水源を返す（固体に当たったら null）。流れている流体（重み1以上）は素通りする
+function raycastFluidSource(origin, dir, maxDist) {
+  for (let s = 0; s <= maxDist; s += 0.05) {
+    const x = Math.floor(origin.x + dir.x * s), y = Math.floor(origin.y + dir.y * s), z = Math.floor(origin.z + dir.z * s);
+    const b = getBlock(x, y, z);
+    if (isSolid(b)) return null;
+    if (isFluid(b)) { const lv = fluidLevel.get3(x, y, z); if (lv === undefined || lv === 0) return { x, y, z, id: b }; }
+  }
+  return null;
+}
+// 手に持っているバケツ1個を別のバケツに替える（複数持っているときは1個だけ。置き場所が無ければ投げる）
+function swapHeldBucket(newId) {
+  const st = inv[selectedSlot];
+  if (--st.count <= 0) inv[selectedSlot] = { id: newId, count: 1 };
+  else { const rest = { id: newId, count: 1 }; addItem(rest); if (rest.count > 0) throwItem(newId, 1); }
+  syncHotbar(true); render(); updateHeldItemMesh();
+}
+function scoopFluid() {
+  const dir = new THREE.Vector3(); camera.getWorldDirection(dir);
+  const f = raycastFluidSource(camera.position, dir, 6);
+  if (!f) return false;
+  setBlock(f.x, f.y, f.z, BLOCK.AIR);
+  recordEdit(f.x, f.y, f.z, BLOCK.AIR);
+  triggerFluidSpreadAround(f.x, f.y, f.z); // 周りに流体が残っていれば、空いた所へ流れ込む
+  rebuildWithLight(f.x, f.y, f.z);
+  SFX.splash(0.3);
+  const filled = f.id === BLOCK.LAVA ? 'lava_bucket' : 'water_bucket';
+  if (gameMode === 'creative') { // 消費しない。同じ中身のバケツが無ければ1個だけ持ち物へ足す
+    if (!inv.some(s => s && s.id === filled)) addItem({ id: filled, count: 1 });
+    render();
+  } else swapHeldBucket(filled);
+  triggerArmSwing();
+  return true;
+}
+function placeBucketFluid(hit, bk) {
+  const fid = bk === 'lava_bucket' ? BLOCK.LAVA : BLOCK.WATER;
+  const replacing = isCross(getBlock(hit.x, hit.y, hit.z));
+  const px = replacing ? hit.x : hit.x + hit.normal.x, py = replacing ? hit.y : hit.y + hit.normal.y, pz = replacing ? hit.z : hit.z + hit.normal.z;
+  if (py < 0 || py >= CH) return;
+  const cur = getBlock(px, py, pz), lv = fluidLevel.get3(px, py, pz);
+  const flowing = isFluid(cur) && lv !== undefined && lv > 0; // 流れている流体は置き換えてよい
+  if (!(cur === BLOCK.AIR || isCross(cur) || flowing)) return;
+  setBlock(px, py, pz, fid);
+  SFX.splash(0.4);
+  fluidLevel.set3(px, py, pz, 0);
+  recordFluid(fid, px, py, pz, 0); // 水源として保存（変更記録）
+  if (!fluidReact(fid, px, py, pz)) scheduleFluidSpread(fid, px, py, pz, 0, 0); // 水と溶岩が触れて固まったら広げない
+  rebuildWithLight(px, py, pz);
+  if (gameMode === 'survival') swapHeldBucket('bucket');
+  triggerArmSwing();
+}
+
+// 右クリック装備: ホットバーで持っている防具を、対応する防具枠へ装備する（本家準拠）。
+//  ・枠が空ならそのまま装備し、手は空になる
+//  ・すでに防具を着ていれば入れ替え、元の防具を手に戻す（耐久値も一緒に移る）
+//  ・押した瞬間の1回だけ処理する（長押しで連続入れ替えはしない）
+function equipHeldArmor() {
+  const st = inv[selectedSlot];
+  if (!st || typeof st.id !== 'string') return false;
+  const d = ITEMS[st.id];
+  if (!d || d.armor === undefined) return false;
+  const old = armor[d.armor];
+  armor[d.armor] = st;
+  inv[selectedSlot] = old || null;
+  SFX.block('place', 'metal', 0.8);
+  triggerArmSwing();
+  syncHotbar(true); render(); updateHeldItemMesh();
+  showItemName(d.n + 'を装備した');
+  return true;
+}
 
 // 中クリック（ピックブロック）: 照準先のブロックを手に持つ。本家準拠:
 //  ・ホットバーにあれば、そのスロットを選ぶ
@@ -4838,31 +5665,38 @@ const PLANT_SOIL = { // 植物ごとに根づける地面（枯れ木は砂に�
   [BLOCK.TALL_GRASS]: SOIL_EARTH, [BLOCK.DANDELION]: SOIL_EARTH, [BLOCK.POPPY]: SOIL_EARTH,
   [BLOCK.OAK_SAPLING]: SOIL_EARTH, [BLOCK.BIRCH_SAPLING]: SOIL_EARTH, [BLOCK.SPRUCE_SAPLING]: SOIL_EARTH,
 };
-function tryPlaceBlock(hit) {
+// placingId のブロックを hit の先に置けるなら設置座標 {px,py,pz} を、置けないなら null を返す（副作用なし）
+function placeTarget(hit, placingId) {
+  if (placingId === BLOCK.AIR) return null;
   // 植物を狙って置くときは、その植物を置き換える（本家と同じ）
   const replacing = isCross(getBlock(hit.x, hit.y, hit.z));
   const px = replacing ? hit.x : hit.x + hit.normal.x;
   const py = replacing ? hit.y : hit.y + hit.normal.y;
   const pz = replacing ? hit.z : hit.z + hit.normal.z;
-  if (py < 0 || py >= CH) return; // 高さの範囲外には置けない
-  const soil = PLANT_SOIL[hotbarBlocks[selectedSlot]];
-  if (soil && !soil.has(getBlock(px, py - 1, pz))) return; // 地面がないと置けない
+  if (py < 0 || py >= CH) return null; // 高さの範囲外には置けない
+  const soil = PLANT_SOIL[placingId];
+  if (soil && !soil.has(getBlock(px, py - 1, pz))) return null; // 地面がないと置けない
   // プレイヤーの位置と重ならないようにチェック（プレイヤーの半径・身長をきちんと考慮した判定に統一）
   const overlaps = player.pos.x + player.radius > px && player.pos.x - player.radius < px + 1 &&
                     player.pos.z + player.radius > pz && player.pos.z - player.radius < pz + 1 &&
                     player.pos.y + player.height > py && player.pos.y < py + 1;
-  if (overlaps && isSolid(hotbarBlocks[selectedSlot])) return; // 植物など当たり判定のないブロックは自分の体に重ねて置いてよい
+  if (overlaps && isSolid(placingId)) return null; // 植物など当たり判定のないブロックは自分の体に重ねて置いてよい
+  return { px, py, pz };
+}
+function tryPlaceBlock(hit) {
   const placingId = hotbarBlocks[selectedSlot];
-  if (placingId === BLOCK.AIR) return;
+  const target = placeTarget(hit, placingId);
+  if (!target) return;
+  const { px, py, pz } = target;
   consumeHeldBlock();
   setBlock(px, py, pz, placingId);
-  if (placingId === BLOCK.WATER) SFX.splash(0.35); else SFX.block('place', sfxMat(placingId));
+  if (isFluid(placingId)) SFX.splash(0.35); else SFX.block('place', sfxMat(placingId));
   recordEdit(px, py, pz, placingId);
   if (isFluid(placingId)) {
     // 流体ブロックを設置した場合、そこは新しい水源として扱い、流動シミュレーションも開始する。
     fluidLevel.set3(px, py, pz, 0);
     recordFluid(placingId, px, py, pz, 0);
-    scheduleFluidSpread(placingId, px, py, pz, 0, 0);
+    if (!fluidReact(placingId, px, py, pz)) scheduleFluidSpread(placingId, px, py, pz, 0, 0); // 水と触れて固まったら広げない
   }
   rebuildWithLight(px, py, pz);
   checkFall(px, py, pz); // 空中に置いた砂・砂利は落ちる
@@ -4877,14 +5711,17 @@ let placeCooldown = 0;
 function updatePlacing(dt) {
   if (placeCooldown > 0) placeCooldown -= dt;
   if (!locked || player.dead || !mouseRight || placeCooldown > 0) return;
-  if (hotbarBlocks[selectedSlot] === BLOCK.AIR) return;
-  const dir = new THREE.Vector3(); camera.getWorldDirection(dir);
-  const hit = raycastVoxel(camera.position, dir, 7);
-  if (!hit) return;
-  const id = getBlock(hit.x, hit.y, hit.z);
-  if (id === BLOCK.CRAFTING_TABLE || id === BLOCK.FURNACE) return;
-  tryPlaceBlock(hit);
-  placeCooldown = PLACE_REPEAT_INTERVAL;
+  const run = () => {
+    if (hotbarBlocks[selectedSlot] === BLOCK.AIR) return;
+    const dir = new THREE.Vector3(); camera.getWorldDirection(dir);
+    const hit = raycastVoxel(camera.position, dir, 7);
+    if (!hit) return;
+    const id = getBlock(hit.x, hit.y, hit.z);
+    if (id === BLOCK.CRAFTING_TABLE || id === BLOCK.FURNACE || id === BLOCK.CHEST) return;
+    tryPlaceBlock(hit);
+    placeCooldown = PLACE_REPEAT_INTERVAL;
+  };
+  if (useOffhand()) offhandSwapped(run); else run();
 }
 canvasEl.addEventListener('contextmenu', e => e.preventDefault());
 window.addEventListener('mouseup', e => {
@@ -4914,6 +5751,8 @@ function setGameMode(m) {
 function resetPlayerStats() {
   player.hunger = VITALS.maxHunger; player.saturation = 5; player.exhaustion = 0;
   player.flying = false; regenTimer = 0; starveTimer = 0;
+  player.burn = 0; player.burnTick = 0;
+  const fo = document.getElementById('fire-overlay'); if (fo) fo.classList.remove('show');
 }
 function consumeHeldBlock() {
   if (gameMode === 'creative') return;
@@ -4952,6 +5791,9 @@ function heldFood() {
   return st && typeof st.id === 'string' && ITEMS[st.id].food ? st : null;
 }
 function updateEating(dt) {
+  if (mouseRight && useOffhand()) offhandSwapped(() => updateEatingHand(dt)); else updateEatingHand(dt);
+}
+function updateEatingHand(dt) {
   const f = heldFood();
   if (!locked || player.dead || !mouseRight || !f || gameMode === 'creative' || player.hunger >= VITALS.maxHunger) { eatTimer = 0; return; }
   eatTimer += dt;
@@ -4980,6 +5822,9 @@ BLOCK_PROPS[BLOCK.COAL_ORE] = { h: 3, tool: 'pickaxe', req: 1 };
 BLOCK_PROPS[BLOCK.IRON_ORE] = { h: 3, tool: 'pickaxe', req: 2 };    // 石以上のツルハシが必要
 BLOCK_PROPS[BLOCK.GOLD_ORE] = { h: 3, tool: 'pickaxe', req: 3 };    // 鉄以上
 BLOCK_PROPS[BLOCK.DIAMOND_ORE] = { h: 3, tool: 'pickaxe', req: 3 }; // 鉄以上
+BLOCK_PROPS[BLOCK.LAPIS_ORE] = { h: 3, tool: 'pickaxe', req: 2 };    // 石以上
+BLOCK_PROPS[BLOCK.REDSTONE_ORE] = { h: 3, tool: 'pickaxe', req: 3 }; // 鉄以上
+BLOCK_PROPS[BLOCK.COPPER_ORE] = { h: 3, tool: 'pickaxe', req: 2 };    // 石以上
 BLOCK_PROPS[BLOCK.FURNACE] = { h: 3.5, tool: 'pickaxe', req: 1 };
 BLOCK_PROPS[BLOCK.BEDROCK] = { h: -1 }; // 壊せない
 BLOCK_PROPS[BLOCK.SANDSTONE] = { h: 0.8, tool: 'pickaxe', req: 1 }; // 砂岩はツルハシが必要
@@ -4990,6 +5835,7 @@ BLOCK_PROPS[BLOCK.DEAD_BUSH] = { h: 0 };                               // 枯れ
 BLOCK_PROPS[BLOCK.GLASS] = { h: 0.3 };                                 // ガラスは素手で壊せるが何も落とさない
 for (const id of [BLOCK.WOOL_WHITE, BLOCK.WOOL_RED, BLOCK.WOOL_BLUE, BLOCK.WOOL_GREEN, BLOCK.WOOL_YELLOW, BLOCK.WOOL_BLACK]) BLOCK_PROPS[id] = { h: 0.8 };
 BLOCK_PROPS[BLOCK.BOOKSHELF] = { h: 1.5, tool: 'axe' };
+BLOCK_PROPS[BLOCK.CHEST] = { h: 2.5, tool: 'axe' };                     // 本家と同じ硬さ2.5。斧が速いが、素手でも壊せて中身ごと落とす
 BLOCK_PROPS[BLOCK.OBSIDIAN] = { h: 50, tool: 'pickaxe', req: 4 };      // ダイヤのツルハシが必要（本家と同じ約9.4秒）
 BLOCK_PROPS[BLOCK.BIRCH_WOOD] = { h: 2, tool: 'axe' }; BLOCK_PROPS[BLOCK.SPRUCE_WOOD] = { h: 2, tool: 'axe' };
 BLOCK_PROPS[BLOCK.BIRCH_LEAVES] = { h: 0.2 }; BLOCK_PROPS[BLOCK.SPRUCE_LEAVES] = { h: 0.2 };
@@ -5001,6 +5847,7 @@ BLOCK_PROPS[BLOCK.GOLD_BLOCK] = { h: 3, tool: 'pickaxe', req: 3 };
 BLOCK_PROPS[BLOCK.DIAMOND_BLOCK] = { h: 5, tool: 'pickaxe', req: 3 };
 BLOCK_PROPS[BLOCK.STONE_BRICKS] = { h: 1.5, tool: 'pickaxe', req: 1 };
 BLOCK_PROPS[BLOCK.SMOOTH_STONE] = { h: 2, tool: 'pickaxe', req: 1 };
+for (const b of [BLOCK.GRANITE, BLOCK.DIORITE, BLOCK.ANDESITE]) BLOCK_PROPS[b] = { h: 1.5, tool: 'pickaxe', req: 1 };
 // 道具を使ってブロックを壊すと耐久が1減る。0になると壊れる
 function damageHeldTool() {
   const st = inv[selectedSlot];
@@ -5040,9 +5887,12 @@ function dropsFor(id, canHarvest) {
     case BLOCK.STONE: return [{ id: BLOCK.COBBLESTONE, count: 1 }];
     case BLOCK.COAL_ORE: return [{ id: 'coal', count: 1 }];
     case BLOCK.DIAMOND_ORE: return [{ id: 'diamond', count: 1 }];
+    case BLOCK.LAPIS_ORE: return [{ id: 'lapis_lazuli', count: 4 + Math.floor(Math.random() * 6) }];
+    case BLOCK.REDSTONE_ORE: return [{ id: 'redstone', count: 4 + Math.floor(Math.random() * 2) }];
     case BLOCK.BEDROCK: return [];
     case BLOCK.GLASS: case BLOCK.ICE: return []; // 本家はシルクタッチ以外で何も落とさない
     case BLOCK.SNOW_BLOCK: return [{ id: 'snowball', count: 4 }]; // 本家は雪玉4個
+    case BLOCK.GRAVEL: return Math.random() < 0.1 ? [{ id: 'flint', count: 1 }] : [{ id: BLOCK.GRAVEL, count: 1 }]; // 本家準拠: 10%で火打石、それ以外は砂利（幸運なし）
     case BLOCK.TALL_GRASS: return []; // 草は何も落とさない（本家は種が出るが種は未実装）
     case BLOCK.DEAD_BUSH: { const n = Math.floor(Math.random() * 3); return n ? [{ id: 'stick', count: n }] : []; } // 棒0〜2本
     case BLOCK.LEAVES: case BLOCK.BIRCH_LEAVES: case BLOCK.SPRUCE_LEAVES: { // 本家の確率（幸運なし）
@@ -5096,8 +5946,17 @@ function breakBlockAt(x, y, z, canHarvest, natural) {
     if (fst) {
       if (furnaceOpen && furnaceKey === fk) closeFurnace();
       for (const it of [fst.inp[0], fst.fuel[0], fst.out[0]]) if (it) spawnItem(it.id, it.count, x + 0.5, y + 0.5, z + 0.5, { spread: true, dmg: it.dmg });
-      if (fst.xp && gameMode === 'survival') addXpFrac(fst.xp); // 壊したときも溜まった経験値を受け取る
+      if (fst.xp && gameMode === 'survival') spawnXpOrbs(xpRound(fst.xp), x + 0.5, y + 0.5, z + 0.5); // 壊したときも溜まった経験値がオーブで出る
       furnaces.delete(fk); litFurnaces.delete(fk);
+    }
+  }
+  if (id === BLOCK.CHEST) { // 中身は飛び出す（クリエイティブでも）
+    const ck = key(x, y, z);
+    if (chestOpen && chestKey === ck) closeChest();
+    const carr = chests.get(ck);
+    if (carr) {
+      for (const it of carr) if (it) spawnItem(it.id, it.count, x + 0.5, y + 0.5, z + 0.5, { spread: true, dmg: it.dmg });
+      chests.delete(ck);
     }
   }
   setBlock(x, y, z, BLOCK.AIR);
@@ -5112,7 +5971,18 @@ function breakBlockAt(x, y, z, canHarvest, natural) {
   if (gameMode === 'survival') {
     if (!natural) { addExhaustion(0.005); if ((BLOCK_PROPS[id] || { h: 0.5 }).h > 0) damageHeldTool(); }
     for (const d of dropsFor(id, canHarvest)) spawnItem(d.id, d.count, x + 0.5, y + 0.3, z + 0.5, { spread: true });
-    if (canHarvest) addXp(oreXp(id)); // 適正ツールで掘れたときだけ経験値が出る
+    if (canHarvest) spawnXpOrbs(oreXp(id), x + 0.5, y + 0.5, z + 0.5); // 適正ツールで掘れたときだけ経験値オーブが出る
+    // 氷は壊すと、その場に水源ができる（本家準拠。足元が空気だと水にならず、クリエイティブでも出ない）
+    if (id === BLOCK.ICE) {
+      const below = getBlock(x, y - 1, z);
+      if (below !== BLOCK.AIR && (isSolid(below) || isFluid(below)) && getBlock(x, y, z) === BLOCK.AIR) {
+        setBlock(x, y, z, BLOCK.WATER);
+        fluidLevel.set3(x, y, z, 0);
+        recordFluid(BLOCK.WATER, x, y, z, 0); // 水源として保存（変更記録）
+        if (!fluidReact(BLOCK.WATER, x, y, z)) scheduleFluidSpread(BLOCK.WATER, x, y, z, 0, 0); // 溶岩に触れて固まったら広げない
+        rebuildWithLight(x, y, z);
+      }
+    }
   }
 }
 function updateMining(dt) {
@@ -5171,6 +6041,93 @@ function removeItemEntity(i) {
   itemEntities.splice(i, 1);
 }
 function clearItemEntities() { while (itemEntities.length) removeItemEntity(itemEntities.length - 1); }
+
+// ============================================================
+// 飛翔体（雪玉）。矢など他の飛び道具も projectiles に type を足して流用できる。
+// 雪玉はダメージ0でノックバックだけ与える（本家準拠）
+// ============================================================
+const projectiles = [];
+// 単位は本家と同じ（速度＝ブロック/ティック、重力＝ブロック/ティック²）。物理は1ティック(0.05秒)の固定刻みで進める。
+// 各ティックの順序も本家と同じ: 位置更新 → 抗力(×drag) → 重力(vy -= gravity)
+const PROJ_TICK = 0.05;
+const PROJ_LIFE_TICKS = 200; // 10秒で消える（本家は世界の外に出るまで。ここでは保険）
+const PROJ_TYPES = {
+  // 雪玉: 初速1.5 / 重力0.03 / 抗力0.99 / 当たり判定0.25×0.25 / 投げたときのブレ(inaccuracy)1.0
+  // 同じ値を使う投擲物: 卵・エンダーパール。ポーションは 初速0.5・重力0.05・上向き補正20°、経験値の瓶は 初速0.7・重力0.07・上向き補正20°
+  snowball: { speed: 1.5, gravity: 0.03, drag: 0.99, radius: 0.125, inaccuracy: 1.0, kb: 6, cooldown: 0.25 },
+};
+let projAcc = 0, projCooldown = 0;
+function gauss() { return Math.sqrt(-2 * Math.log(1 - Math.random())) * Math.cos(2 * Math.PI * Math.random()); } // 標準正規乱数
+function removeProjectile(i) {
+  const p = projectiles[i];
+  scene.remove(p.obj);
+  p.obj.material.dispose();
+  projectiles.splice(i, 1);
+}
+function clearProjectiles() { while (projectiles.length) removeProjectile(projectiles.length - 1); projAcc = 0; }
+function throwSnowball() {
+  const st = inv[selectedSlot];
+  if (!st || st.id !== 'snowball') return false;
+  if (projCooldown > 0) return true; // クールダウン中（クリックは消費して、ブロックは置かない）
+  const T = PROJ_TYPES.snowball;
+  projCooldown = T.cooldown;
+  const dir = new THREE.Vector3(); camera.getWorldDirection(dir);
+  // 本家と同じ: 単位ベクトルに、標準偏差 0.0075×inaccuracy のブレを各成分へ足してから速度を掛ける
+  const k = 0.0075 * T.inaccuracy;
+  const vel = new THREE.Vector3(dir.x + gauss() * k, dir.y + gauss() * k, dir.z + gauss() * k).multiplyScalar(T.speed);
+  const c = camera.position;
+  const pos = new THREE.Vector3(c.x, c.y - 0.1, c.z); // 本家は「目の高さ − 0.1」から出る
+  const obj = new THREE.Sprite(new THREE.SpriteMaterial({ map: itemSpriteTexture('snowball'), transparent: true }));
+  obj.scale.set(0.3, 0.3, 1);
+  obj.position.copy(pos);
+  scene.add(obj);
+  projectiles.push({ type: 'snowball', obj, pos, prev: pos.clone(), vel, age: 0 });
+  triggerArmSwing(); SFX.pop();
+  if (gameMode !== 'creative') consumeHeldBlock(); // サバイバルでは1個消費
+  return true;
+}
+function projectileHitsMob(p, r) {
+  for (const m of mobs) {
+    if (m.dead > 0) continue;
+    const mr = m.d.r + r;
+    if (Math.abs(p.pos.x - m.pos.x) < mr && Math.abs(p.pos.z - m.pos.z) < mr && p.pos.y > m.pos.y - r && p.pos.y < m.pos.y + m.d.h + r) return m;
+  }
+  return null;
+}
+// 1ティック進める。当たって消えるなら true
+function tickProjectile(p) {
+  const T = PROJ_TYPES[p.type];
+  p.prev.copy(p.pos);
+  if (++p.age > PROJ_LIFE_TICKS || p.pos.y < -10) return true;
+  // 1ティックで最大1.5ブロック動くので、0.15ブロック以下に刻んで壁・モブのすり抜けを防ぐ
+  const steps = Math.max(1, Math.ceil(p.vel.length() / 0.15));
+  for (let s = 0; s < steps; s++) {
+    p.pos.x += p.vel.x / steps; p.pos.y += p.vel.y / steps; p.pos.z += p.vel.z / steps;
+    const bx = Math.floor(p.pos.x), by = Math.floor(p.pos.y), bz = Math.floor(p.pos.z);
+    const [ccx, ccz] = worldToChunk(bx, bz);
+    if (!loadedChunks.has(chunkKeyOf(ccx, ccz))) return true; // 未読み込みチャンクでは消す
+    if (isSolid(getBlock(bx, by, bz))) return true;
+    const m = projectileHitsMob(p, T.radius);
+    if (m) {
+      m.byPlayer = performance.now() / 1000;
+      damageMob(m, 0, m.pos.x - p.vel.x, m.pos.z - p.vel.z, T.kb); // ダメージ0・飛んできた向きへノックバック
+      return true;
+    }
+  }
+  p.vel.multiplyScalar(T.drag); p.vel.y -= T.gravity; // 抗力 → 重力
+  return false;
+}
+function updateProjectiles(dt) {
+  if (projCooldown > 0) projCooldown -= dt;
+  if (!projectiles.length) { projAcc = 0; return; }
+  projAcc += Math.min(dt, 0.25);
+  while (projAcc >= PROJ_TICK) {
+    projAcc -= PROJ_TICK;
+    for (let i = projectiles.length - 1; i >= 0; i--) if (tickProjectile(projectiles[i])) removeProjectile(i);
+  }
+  const a = projAcc / PROJ_TICK; // ティックの間は前回位置との補間でなめらかに表示
+  for (const p of projectiles) p.obj.position.lerpVectors(p.prev, p.pos, a);
+}
 function spawnItem(id, count, x, y, z, opts = {}) {
   // 近くの同種アイテムがあれば合流させて数を抑える
   if (!opts.noMerge) {
@@ -5209,6 +6166,7 @@ function updateItemEntities(dt) {
     if (!loadedChunks.has(chunkKeyOf(ccx, ccz))) continue; // 未読み込みチャンク上では停止
 
     const bx = Math.floor(e.pos.x), bz = Math.floor(e.pos.z), by = Math.floor(e.pos.y + 0.1);
+    if (getBlock(bx, by, bz) === BLOCK.LAVA) { removeItemEntity(i); continue; } // 溶岩に落ちたアイテムは燃えて消える
     if (getBlock(bx, by, bz) === BLOCK.WATER) e.vel.y += (-1.0 - e.vel.y) * Math.min(1, dt * 4); // 水中はゆっくり沈む
     else e.vel.y = Math.max(-15, e.vel.y - 25 * dt);
 
@@ -5248,6 +6206,123 @@ function updateItemEntities(dt) {
   }
 }
 
+// ============================================================
+// 経験値オーブ（本家準拠）
+//  ・経験値は値ごとに大きさの違うオーブに分けて出る（例: 11点 → 7点＋3点＋1点）
+//  ・プレイヤーが8ブロック以内にいると吸い寄せられ、近いほど強く引かれる
+//  ・触れると addXp で経験値になる。緑↔黄色にゆっくり点滅。5分で消える。近くの同じ値のオーブは1つに合体
+// ============================================================
+const xpOrbs = [];
+const XP_ORB_VALUES = [2477, 1237, 617, 307, 149, 73, 37, 17, 7, 3, 1]; // 本家のオーブ値（大きい順）
+const XP_ORB_LIFE_TICKS = 6000; // 5分（1ティック=0.05秒。物理は本家と同じく20Hzの固定刻みで進める）
+const XP_TICK = 0.05;
+let xpAcc = 0;
+const XP_ORB_RANGE = 8;      // 吸い寄せ範囲（ブロック）
+const XP_ORB_MAX = 150;      // 同時に存在できる数。超えたら一番古い分の経験値をその場で受け取る
+let xpOrbTex = null;
+function getXpOrbTexture() {
+  if (xpOrbTex) return xpOrbTex;
+  const c = document.createElement('canvas'); c.width = c.height = 32;
+  const g = c.getContext('2d');
+  const gr = g.createRadialGradient(16, 16, 1, 16, 16, 14);
+  gr.addColorStop(0, '#ffffff'); gr.addColorStop(0.55, '#d8d8d8'); gr.addColorStop(0.85, '#9a9a9a'); gr.addColorStop(1, 'rgba(120,120,120,0)');
+  g.fillStyle = gr; g.beginPath(); g.arc(16, 16, 14, 0, Math.PI * 2); g.fill();
+  return xpOrbTex = new THREE.CanvasTexture(c);
+}
+function xpOrbIcon(v) { // 値から大きさの段階(0〜10)を決める（本家のアイコン分け）
+  return v < 3 ? 0 : v < 7 ? 1 : v < 17 ? 2 : v < 37 ? 3 : v < 73 ? 4 : v < 149 ? 5 : v < 307 ? 6 : v < 617 ? 7 : v < 1237 ? 8 : v < 2477 ? 9 : 10;
+}
+function removeXpOrb(i) {
+  const o = xpOrbs[i];
+  scene.remove(o.obj); o.obj.material.dispose();
+  xpOrbs.splice(i, 1);
+}
+function clearXpOrbs() { while (xpOrbs.length) removeXpOrb(xpOrbs.length - 1); xpAcc = 0; }
+// 合計 total 点を、大きなオーブから順に分けて (x,y,z) に出す。サバイバル以外では出ない
+function spawnXpOrbs(total, x, y, z) {
+  if (gameMode !== 'survival' || !(total > 0)) return;
+  total = Math.floor(total);
+  while (total > 0) {
+    const v = XP_ORB_VALUES.find(val => val <= total);
+    total -= v;
+    // 近くに同じ値のオーブがあれば合体（数を抑える）
+    const near = xpOrbs.find(o => o.value === v && o.pos.distanceToSquared(new THREE.Vector3(x, y, z)) < 0.25);
+    if (near) { near.count++; near.age = Math.min(near.age, 1200); continue; }
+    if (xpOrbs.length >= XP_ORB_MAX) { addXp(xpOrbs[0].value * xpOrbs[0].count); removeXpOrb(0); }
+    const obj = new THREE.Sprite(new THREE.SpriteMaterial({ map: getXpOrbTexture(), transparent: true }));
+    const sz = 0.2 + xpOrbIcon(v) * 0.035; obj.scale.set(sz, sz, 1);
+    obj.position.set(x, y, z);
+    scene.add(obj);
+    // 出た瞬間は少し弾ける（本家: 横 ±0.2、上 0〜0.4 ブロック/ティック）
+    xpOrbs.push({ value: v, count: 1, obj, pos: new THREE.Vector3(x, y, z), prev: new THREE.Vector3(x, y, z), age: 0, phase: Math.random() * 6.28,
+                  vel: new THREE.Vector3((Math.random() * 0.2 - 0.1) * 2, Math.random() * 0.2 * 2, (Math.random() * 0.2 - 0.1) * 2) }); // 速度はブロック/ティック
+  }
+}
+// 1ティック進める。消える（取得・溶岩・寿命）なら true。順序は本家と同じ: 重力 → 吸い寄せ → 移動 → 摩擦
+function tickXpOrb(o) {
+  o.prev.copy(o.pos);
+  if (++o.age > XP_ORB_LIFE_TICKS || o.pos.y < -10) return true;
+  const [ccx, ccz] = worldToChunk(Math.floor(o.pos.x), Math.floor(o.pos.z));
+  if (!loadedChunks.has(chunkKeyOf(ccx, ccz))) return false; // 未読み込みチャンク上では停止
+  const bx = Math.floor(o.pos.x), bz = Math.floor(o.pos.z), by = Math.floor(o.pos.y + 0.1);
+  const here = getBlock(bx, by, bz);
+  if (here === BLOCK.LAVA) return true;
+  if (here === BLOCK.WATER) o.vel.y += (-0.05 - o.vel.y) * 0.2; // 水中はゆっくり沈む
+  else o.vel.y = Math.max(-0.75, o.vel.y - 0.03);               // 重力 0.03 ブロック/ティック²
+
+  // 吸い寄せ: 8ブロック以内なら、近いほど強く引く（速度 += 向き × (1−距離/8)² × 0.1）。狙う高さは目の高さの半分
+  const alive = !player.dead; // メニューを開いていても取得できる（本家と同じ。かまどの経験値をすぐ受け取れる）
+  if (alive) {
+    const dx = player.pos.x - o.pos.x, dy = (player.pos.y + 0.81) - o.pos.y, dz = player.pos.z - o.pos.z;
+    const d2 = dx * dx + dy * dy + dz * dz;
+    if (d2 < XP_ORB_RANGE * XP_ORB_RANGE && d2 > 1e-6) {
+      const d = Math.sqrt(d2), f = 1 - d / XP_ORB_RANGE, acc = f * f * 0.1 / d;
+      o.vel.x += dx * acc; o.vel.y += dy * acc; o.vel.z += dz * acc;
+    }
+  }
+
+  // 移動と地形との当たり判定（アイテムと同じ方式）
+  let nx = o.pos.x + o.vel.x, nz = o.pos.z + o.vel.z, ny = o.pos.y + o.vel.y;
+  if (isSolid(getBlock(Math.floor(nx), by, bz))) { o.vel.x *= -0.3; nx = o.pos.x; }
+  if (isSolid(getBlock(Math.floor(nx), by, Math.floor(nz)))) { o.vel.z *= -0.3; nz = o.pos.z; }
+  let onGround = false;
+  if (o.vel.y <= 0 && isSolid(getBlock(Math.floor(nx), Math.floor(ny), Math.floor(nz)))) {
+    ny = Math.floor(ny) + 1; o.vel.y = 0; onGround = true;
+  } else if (o.vel.y > 0 && isSolid(getBlock(Math.floor(nx), Math.floor(ny + 0.3), Math.floor(nz)))) {
+    o.vel.y = 0; ny = o.pos.y;
+  }
+  if (isSolid(getBlock(Math.floor(nx), Math.floor(ny + 0.1), Math.floor(nz)))) ny = Math.floor(ny + 0.1) + 1; // 埋まったら押し上げ
+  o.pos.set(nx, ny, nz);
+  // 摩擦（本家: 空中 0.98、地面 0.6×0.98）
+  const fr = onGround ? 0.588 : 0.98;
+  o.vel.x *= fr; o.vel.z *= fr; o.vel.y *= 0.98;
+
+  // 取得（プレイヤーに触れたら経験値になる）
+  if (alive) {
+    const dx = Math.abs(player.pos.x - o.pos.x), dz = Math.abs(player.pos.z - o.pos.z);
+    if (dx < 0.55 && dz < 0.55 && o.pos.y > player.pos.y - 0.25 && o.pos.y < player.pos.y + 1.8) {
+      addXp(o.value * o.count);
+      return true;
+    }
+  }
+  return false;
+}
+function updateXpOrbs(dt) {
+  if (!xpOrbs.length) { xpAcc = 0; return; }
+  xpAcc += Math.min(dt, 0.25);
+  while (xpAcc >= XP_TICK) {
+    xpAcc -= XP_TICK;
+    for (let i = xpOrbs.length - 1; i >= 0; i--) if (tickXpOrb(xpOrbs[i])) removeXpOrb(i);
+  }
+  const a = xpAcc / XP_TICK; // ティックの間は前回位置との補間でなめらかに表示
+  for (const o of xpOrbs) {
+    // 見た目: 緑↔黄色のゆっくりした点滅（本家: 赤成分 0〜1、青成分 0〜0.2、緑は常に1）
+    const h = (o.age + a) / 4 + o.phase;
+    o.obj.material.color.setRGB((Math.sin(h) + 1) * 0.5, 1, (Math.sin(h + 4.1887) + 1) * 0.1);
+    o.obj.position.lerpVectors(o.prev, o.pos, a);
+    o.obj.position.y += 0.12;
+  }
+}
 // ============================================================
 // 落下するブロック（砂・砂利）
 // 下が空気・植物・流体・松明になった砂/砂利は、ブロックを消して落下エンティティに置き換える。
@@ -5353,6 +6428,36 @@ function scheduleLeafChecks(x, y, z) {
     const k = key(nx, ny, nz);
     if (placedLeaves.has(k) || leafDecayQueue.has(k)) continue;
     if (!leafConnected(nx, ny, nz)) leafDecayQueue.set(k, { x: nx, y: ny, z: nz, id: b, due: now + 300 + Math.random() * 4000 });
+  }
+}
+// ------ 氷の融解（本家準拠: ランダムチックでブロック光が強いと溶けて水になる） ------
+// 本家は氷のブロック光が11以上（松明の3ブロック以内・溶岩・かまど等の近く）だと、ランダムチックで水源に変わる。
+// ここでは1秒ごとに、各氷が平均約68秒に1回（本家のランダムチックの頻度）判定を受ける形で近似する。
+let iceMeltTimer = 0;
+function updateIceMelt(dt) {
+  iceMeltTimer += dt;
+  if (iceMeltTimer < 1) return;
+  iceMeltTimer = 0;
+  for (const c of loadedChunks.values()) {
+    if (!c.ice || c.ice.size === 0) continue;
+    let melt = null;
+    for (const i of c.ice) {
+      if (Math.random() >= 1 / 68) continue;
+      const y = i >> 8, x = c.cx * 16 + (i & 15), z = c.cz * 16 + ((i >> 4) & 15);
+      // 氷自身のセルの光（光を通す氷は自分のセルにも光が入る）。念のため隣の光-1も見る
+      const nb = Math.max(blkAt(x + 1, y, z), blkAt(x - 1, y, z), blkAt(x, y + 1, z), blkAt(x, y - 1, z), blkAt(x, y, z + 1), blkAt(x, y, z - 1));
+      if (Math.max(blkAt(x, y, z), nb - 1) >= 11) (melt || (melt = [])).push(x, y, z);
+    }
+    if (!melt) continue;
+    for (let k = 0; k < melt.length; k += 3) {
+      const x = melt[k], y = melt[k + 1], z = melt[k + 2];
+      if (getBlock(x, y, z) !== BLOCK.ICE) continue;
+      setBlock(x, y, z, BLOCK.WATER); // 溶けた氷は水源になる（周りへは流体の仕組みで広がる）
+      fluidLevel.set3(x, y, z, 0);
+      recordFluid(BLOCK.WATER, x, y, z, 0);
+      if (!fluidReact(BLOCK.WATER, x, y, z)) scheduleFluidSpread(BLOCK.WATER, x, y, z, 0, 0);
+      rebuildWithLight(x, y, z);
+    }
   }
 }
 function updateLeafDecay() {
@@ -5540,6 +6645,20 @@ updateDayNight(0);
 
 // ------ 水中の視界（目が水ブロックの中にある間、青い画面と近い霧にする） ------
 const underwaterOverlayEl = document.getElementById('underwater-overlay');
+const lavaOverlayEl = document.getElementById('lava-overlay');
+const fireOverlayEl = document.getElementById('fire-overlay');
+// 炎上: 溶岩に触れると15秒間燃え、毎秒1ダメージ（防具では減らない）。水に入ると消える。クリエイティブでは燃えない
+function updateBurning(dt, waterState) {
+  if (gameMode !== 'survival' || player.dead) { player.burn = 0; player.burnTick = 0; fireOverlayEl.classList.remove('show'); return; }
+  if (waterState.inLava) { player.burn = 15; player.burnTick = 0; } // 溶岩の中にいる間は炎上ダメージを受けない（出た時点から15秒）
+  else if (player.burn > 0 && waterState.inWater) { player.burn = 0; player.burnTick = 0; SFX.fizz(); }
+  if (player.burn > 0 && !waterState.inLava) {
+    player.burn -= dt;
+    player.burnTick += dt;
+    if (player.burnTick >= 1) { player.burnTick -= 1; applyDamage(1, '燃えて死んでしまった'); }
+  } else if (!waterState.inLava) player.burnTick = 0;
+  fireOverlayEl.classList.toggle('show', player.burn > 0 && !player.dead);
+}
 const FOG_NEAR_BASE = scene.fog.near, FOG_FAR_BASE = scene.fog.far; // 描画距離4チャンクのときの値
 let FOG_NEAR_NORMAL = FOG_NEAR_BASE * RENDER_DISTANCE / RD_DEFAULT, FOG_FAR_NORMAL = FOG_FAR_BASE * RENDER_DISTANCE / RD_DEFAULT;
 scene.fog.near = FOG_NEAR_NORMAL; scene.fog.far = FOG_FAR_NORMAL;
@@ -5549,6 +6668,27 @@ const waterFogTmp = new THREE.Color();
 let underwaterT = 0; // 0=地上 1=水中（なめらかに切り替える）
 function eyeInWater() {
   return getBlock(Math.floor(camera.position.x), Math.floor(camera.position.y), Math.floor(camera.position.z)) === BLOCK.WATER;
+}
+// 目が溶岩に浸かっているか（表面の高さより下にカメラがあるとき）
+function eyeInLava() {
+  const x = Math.floor(camera.position.x), y = Math.floor(camera.position.y), z = Math.floor(camera.position.z);
+  if (getBlock(x, y, z) !== BLOCK.LAVA) return false;
+  const lf = FLUIDS[BLOCK.LAVA], lvl = fluidLevel.get3(x, y, z) || 0;
+  const top = getBlock(x, y + 1, z) === BLOCK.LAVA ? 1 : lf.heights[Math.min(lvl, lf.maxSpread)];
+  return camera.position.y < y + top;
+}
+const LAVA_FOG_COLOR = new THREE.Color(0.75, 0.2, 0.02);
+let lavaT = 0; // 0=外 1=溶岩の中（なめらかに切り替える）
+// updateUnderwaterView の後に呼ぶ（霧を溶岩の色・近さへ上書きするため）
+function updateLavaView(dt) {
+  const inLava = !player.dead && eyeInLava();
+  lavaOverlayEl.classList.toggle('show', inLava);
+  lavaT += ((inLava ? 1 : 0) - lavaT) * Math.min(1, dt * 12);
+  if (lavaT < 0.002) { lavaT = 0; return; }
+  scene.fog.near += (0.05 - scene.fog.near) * lavaT;
+  scene.fog.far += (2.5 - scene.fog.far) * lavaT;
+  scene.fog.color.lerp(LAVA_FOG_COLOR, lavaT);
+  scene.background.copy(scene.fog.color);
 }
 // updateDayNight の後に呼ぶ（霧と背景の色をここで上書きするため）
 function updateUnderwaterView(dt) {
@@ -5612,6 +6752,7 @@ function syncOpenFurnace() {
 }
 function buildSave() {
   syncOpenFurnace();
+  syncOpenChest();
   const mods = [];
   for (const [ck, m] of modifiedBlocks) {
     const arr = [];
@@ -5624,10 +6765,11 @@ function buildSave() {
     player: {
       pos: [player.pos.x, player.pos.y, player.pos.z], yaw: player.yaw, pitch: player.pitch,
       health: player.health, hunger: player.hunger, saturation: player.saturation, exhaustion: player.exhaustion,
-      oxygen: player.oxygen, xpLevel: player.xpLevel, xpProgress: player.xpProgress, flying: player.flying,
+      oxygen: player.oxygen, xpLevel: player.xpLevel, xpProgress: player.xpProgress, xpTotal: player.xpTotal || 0, flying: player.flying,
     },
     inv: inv.map(packStack), armor: armor.map(packStack), offhand: offhand.map(packStack), selectedSlot,
     extra: [cursor, ...craft, ...tcraft].map(packStack).filter(Boolean), // カーソル・クラフト欄の持ち物
+    chests: [...chests].map(([k, a]) => [k, a.map(packStack)]),
     furnaces: [...furnaces].map(([k, f]) => [k, { inp: f.inp.map(packStack), fuel: f.fuel.map(packStack), out: f.out.map(packStack), burn: f.burn, burnMax: f.burnMax, cook: f.cook, xp: f.xp || 0 }]),
     items: itemEntities.map(e => ({ id: e.id, count: e.count, dmg: e.dmg, x: e.pos.x, y: e.pos.y, z: e.pos.z }))
       .concat(fallingBlocks.map(f => ({ id: f.id, count: 1, x: f.x + 0.5, y: f.y, z: f.z + 0.5 }))), // 落下中のブロックはアイテムとして保存
@@ -5668,7 +6810,7 @@ function beginGame(opts) {
   fluidPendingQueue = [];
   for (const ckey of Array.from(chunkMeshGroups.keys())) { const [a, b] = ckey.split(',').map(Number); unloadChunkMesh(a, b); }
   lastPlayerChunkX = null; lastPlayerChunkZ = null;
-  modifiedBlocks.clear(); clearItemEntities(); clearFalling(); furnaces.clear(); litFurnaces.clear(); waterLightQueue = [];
+  modifiedBlocks.clear(); clearItemEntities(); clearProjectiles(); clearXpOrbs(); clearFalling(); furnaces.clear(); litFurnaces.clear(); chests.clear(); waterLightQueue = [];
   cursor = null;
 
   // プレイヤー状態を初期化
@@ -5676,7 +6818,7 @@ function beginGame(opts) {
   resetPlayerStats();
   dayTime = 0.02; playSeconds = 0; dayCount = 0; lastDayTime = dayTime;
   player.health = VITALS.maxHealth; player.oxygen = VITALS.maxOxygen; player.dead = false;
-  player.xpLevel = 0; player.xpProgress = 0;
+  player.xpLevel = 0; player.xpProgress = 0; player.xpTotal = 0;
   setGameMode(mode);
 
   if (sv) {
@@ -5705,6 +6847,8 @@ function beginGame(opts) {
     player.yaw = P.yaw; player.pitch = P.pitch;
     player.health = P.health; player.hunger = P.hunger; player.saturation = P.saturation; player.exhaustion = P.exhaustion;
     player.oxygen = P.oxygen; player.xpLevel = P.xpLevel; player.xpProgress = P.xpProgress;
+    // 累計を持たない古いセーブは、現在のレベルと進み具合から復元する
+    player.xpTotal = P.xpTotal !== undefined ? P.xpTotal : Math.round(xpAtLevel(P.xpLevel) + P.xpProgress * xpToNext(P.xpLevel));
     player.flying = !!P.flying && mode === 'creative';
     sv.inv.forEach((st, i) => { inv[i] = unpackStack(st); });
     sv.armor.forEach((st, i) => { armor[i] = unpackStack(st); });
@@ -5717,6 +6861,11 @@ function beginGame(opts) {
         const [fx, fy, fz] = k.split(',').map(Number);
         if (getBlock(fx, fy, fz) === BLOCK.FURNACE) seedTorchLight([[fx, fy, fz]], 13);
       }
+    }
+    for (const [k, a] of (sv.chests || [])) { // チェストの中身（旧セーブには無い）
+      const arr = new Array(27).fill(null);
+      a.forEach((st, i) => { if (i < 27) arr[i] = unpackStack(st); });
+      chests.set(k, arr);
     }
     for (const it of sv.items) spawnItem(migrateItemId(it.id), it.count, it.x, it.y, it.z, { noMerge: true, dmg: it.dmg, delay: 0.5 });
     dayTime = sv.dayTime; playSeconds = sv.playSeconds || 0; dayCount = sv.dayCount || 0; lastDayTime = dayTime;
@@ -5752,7 +6901,7 @@ async function returnToTitle() {
 // 操作がロック解除されたとき（ESC・ウィンドウ切り替えなど）、他のUIを開いていなければポーズメニューを表示
 function onLockChange() {
   if (locked) { pauseScreenEl.style.display = 'none'; return; }
-  if (playing && !player.dead && !invOpen && !tableOpen && !furnaceOpen) pauseScreenEl.style.display = 'flex';
+  if (playing && !player.dead && !invOpen && !tableOpen && !furnaceOpen && !chestOpen) pauseScreenEl.style.display = 'flex';
 }
 document.getElementById('resume-btn').addEventListener('click', () => {
   pauseScreenEl.style.display = 'none';
@@ -5936,7 +7085,7 @@ function mcWipeWorld() {
   clearAllChunkData(); dirtyMeshes.clear(); clearMobs(); fluidPendingQueue = [];
   for (const ck of Array.from(chunkMeshGroups.keys())) { const [a, b] = ck.split(',').map(Number); unloadChunkMesh(a, b); }
   lastPlayerChunkX = null; lastPlayerChunkZ = null;
-  modifiedBlocks.clear(); clearItemEntities(); clearFalling(); furnaces.clear(); litFurnaces.clear(); waterLightQueue = [];
+  modifiedBlocks.clear(); clearItemEntities(); clearProjectiles(); clearXpOrbs(); clearFalling(); furnaces.clear(); litFurnaces.clear(); chests.clear(); waterLightQueue = [];
   placedLeaves.clear(); saplings.clear(); leafDecayQueue.clear();
 }
 function startTitleWorld() {
@@ -6250,21 +7399,27 @@ function getWaterImmersion(pos) {
   const minX = Math.floor(pos.x - r), maxX = Math.floor(pos.x + r);
   const minZ = Math.floor(pos.z - r), maxZ = Math.floor(pos.z + r);
   const minY = Math.floor(pos.y), maxY = Math.floor(pos.y + player.height);
-  let waterCells = 0, totalCells = 0, inFlowingWater = false;
+  let waterCells = 0, lavaCells = 0, totalCells = 0, inFlowingWater = false;
   for (let x = minX; x <= maxX; x++) {
     for (let y = minY; y <= maxY; y++) {
       for (let z = minZ; z <= maxZ; z++) {
         totalCells++;
-        if (getBlock(x, y, z) === BLOCK.WATER) {
+        const bId = getBlock(x, y, z);
+        if (bId === BLOCK.WATER) {
           waterCells++;
           const lvl = fluidLevel.get3(x, y, z);
           if (lvl !== undefined && lvl > 0) inFlowingWater = true;
+        } else if (bId === BLOCK.LAVA) { // 溶岩: 表面の高さより下に体があるときだけ浸かっている扱い
+          const lf = FLUIDS[BLOCK.LAVA], lvl = fluidLevel.get3(x, y, z) || 0;
+          const top = getBlock(x, y + 1, z) === BLOCK.LAVA ? 1 : lf.heights[Math.min(lvl, lf.maxSpread)];
+          if (pos.y < y + top - 0.02) lavaCells++;
         }
       }
     }
   }
   return {
-    inWater: waterCells > 0,
+    inWater: waterCells > 0 || lavaCells > 0, // 溶岩の中も泳ぎ（浮力・落下ダメージ無効）の扱い。呼吸は水だけで判定する
+    inLava: lavaCells > 0,
     ratio: totalCells > 0 ? waterCells / totalCells : 0,
     inFlowingWater,
   };
@@ -6313,6 +7468,12 @@ function updatePhysics(dt) {
   player.underwater = fullySubmerged;
   updateOxygen(dt, fullySubmerged);
   if (touchingCactus(player.pos)) applyDamage(1, 'サボテンに刺されて死んでしまった'); // 無敵時間(0.5秒)ごとに1ダメージ
+  if (waterState.inLava) { // 0.5秒ごとに4ダメージ。Java版では防具で軽減され、被弾で防具の耐久も減る
+    const lavaDmg = Math.max(1, Math.round(4 * (1 - armorReduction()))), hpBefore = player.health;
+    applyDamage(lavaDmg, '溶岩で泳ごうとして死んでしまった');
+    if (player.health < hpBefore) wearArmor(lavaDmg);
+  }
+  updateBurning(dt, waterState); // 溶岩から出た後も燃え続ける（毎秒1ダメージ）
 
   const forward = new THREE.Vector3(Math.sin(player.yaw), 0, Math.cos(player.yaw));
   const right = new THREE.Vector3(Math.sin(player.yaw+Math.PI/2), 0, Math.cos(player.yaw+Math.PI/2));
@@ -6335,8 +7496,8 @@ function updatePhysics(dt) {
   // 空腹度が6以下ではダッシュできない（クリエイティブは無制限）
   let sprintActive = isSprinting && movingForward && (gameMode === 'creative' || player.hunger > 6);
 
-  // スニーク中はダッシュできない
-  if (sneaking && sprintActive) {
+  // スニーク中・盾を構え中はダッシュできない
+  if ((sneaking || (!player.flying && isRaisingShield())) && sprintActive) {
     isSprinting = false;
     sprintActive = false;
   }
@@ -6361,8 +7522,9 @@ function updatePhysics(dt) {
     speed = sprintActive ? RUN_SPEED : WALK_SPEED;
   }
   let targetSpeed = skipDiagonalBoost ? speed : speed * diagonalBoost;
+  if (!player.flying && isRaisingShield()) targetSpeed *= SHIELD_RAISE_SLOW; // 盾を構えている間は移動が遅くなる
   if (player.flying) targetSpeed = sprintActive ? 21.6 : 10.9;
-  else if (waterState.inWater) targetSpeed *= 0.6; // 水中は移動が遅くなる
+  else if (waterState.inWater) targetSpeed *= waterState.inLava ? 0.2 : 0.6; // 水中は移動が遅くなる。溶岩は水平の減衰が大きく（毎tick50%）、水よりずっと遅い
 
   const GROUND_FRICTION = 0.546; // 地上の1tickあたりの摩擦係数（低いほど急停止・急加速）
   const AIR_FRICTION = 0.9092;   // 空中の1tickあたりの摩擦係数（高いほど収束がゆっくり）
@@ -6411,7 +7573,7 @@ function updatePhysics(dt) {
     player.vel.y += (up * (sprintActive ? 15 : 7.5) - player.vel.y) * Math.min(1, dt * 10);
   } else if (waterState.inWater) {
     // 泳ぎ: 浮力でゆっくり沈み、スペースを押している間は浮上する（水面では飛び出して浮き沈みする）
-    const target = keys['Space'] ? 3.4 : -1.6;
+    const target = waterState.inLava ? (keys['Space'] ? 1.8 : -0.6) : (keys['Space'] ? 3.4 : -1.6); // 溶岩は浮き沈みもゆっくり
     player.vel.y += (target - player.vel.y) * Math.min(1, dt * 5);
     player.fallStartY = player.pos.y; // 水中では落下距離をリセット
   } else {
@@ -6551,6 +7713,24 @@ document.getElementById('seed-display-value').textContent = worldSeed;
 document.getElementById('seed-input').placeholder = String(worldSeed) + '（空欄でランダム生成）';
 
 const coordsEl = document.getElementById('coords');
+const chunkPosEl = document.getElementById('chunk-pos');
+const facingEl = document.getElementById('facing');
+const targetInfoEl = document.getElementById('target-info');
+const blockPosEl = document.getElementById('block-pos');
+const biomeInfoEl = document.getElementById('biome-info');
+const dayInfoEl = document.getElementById('day-info');
+const dbgBlockEl = document.getElementById('dbg-block'), dbgFaceEl = document.getElementById('dbg-face'), dbgDistEl = document.getElementById('dbg-dist');
+const dbgMemEl = document.getElementById('dbg-mem'), dbgDisplayEl = document.getElementById('dbg-display'), dbgGpuEl = document.getElementById('dbg-gpu');
+let dbgGpuText = null, dbgMemAt = 0;
+function biomeLabelAt(x, z) { // 既存の地形判定から名前を決める（海・山岳・砂漠・平原）
+  const ob = GEN.oceanBlend(x, z);
+  if (ob >= 0.5) return '海';
+  if (GEN.mountainWeight(x, z) >= 0.5) return '山岳';
+  if (GEN.isDesertAt(x, z)) return '砂漠';
+  if (ob > 0) return '海岸';
+  return '平原';
+}
+let targetHitInfo = null; // 今フレームの照準先ブロック（デバッグ画面用）
 const lightInfoEl = document.getElementById('light-info');
 const chunkCountEl = document.getElementById('chunk-count');
 const visibleChunkCountEl = document.getElementById('visible-chunk-count');
@@ -6612,6 +7792,30 @@ document.querySelectorAll('.br-box').forEach(anchor => {
   }
 });
 for (const st of SETTINGS) for (const e of st.els) { e.sl.value = String(st.v); e.val.textContent = st.fmt(st.v); }
+// ------ 影MOD: 影の入り方をオン/オフする設定（選択は localStorage に保存） ------
+// sun: 太陽の影（ブロックが地面に落とす影）/ ao: 角・隙間の影（頂点AO）/ sky: 屋根や洞窟の下の暗さ（空の光レベル）
+const SHADOW_MOD = { sun: true, ao: true, sky: true };
+const SHADOW_MOD_ITEMS = [['sun', '太陽の影'], ['ao', '角の影（AO）'], ['sky', '屋根・洞窟の暗さ']];
+try { const o = JSON.parse(localStorage.getItem('voxelcraft.shadowmod') || '{}'); for (const k in SHADOW_MOD) if (typeof o[k] === 'boolean') SHADOW_MOD[k] = o[k]; } catch (_) {}
+function applyShadowMod() {
+  sunLight.castShadow = SHADOW_MOD.sun;
+  lightUniforms.uAO.value = SHADOW_MOD.ao ? 1 : 0;
+  lightUniforms.uSkyShade.value = SHADOW_MOD.sky ? 1 : 0;
+  document.querySelectorAll('.shmod-cb').forEach(cb => { cb.checked = SHADOW_MOD[cb.dataset.k]; });
+  try { localStorage.setItem('voxelcraft.shadowmod', JSON.stringify(SHADOW_MOD)); } catch (_) {}
+}
+document.querySelectorAll('.br-box').forEach(anchor => {
+  let ref = anchor.nextElementSibling; while (ref && ref.nextElementSibling && ref.classList.contains('set-box')) ref = ref.nextElementSibling;
+  if (!ref) ref = anchor;
+  const box = document.createElement('div'); box.className = 'set-box';
+  box.innerHTML = '<label>影MOD</label>' + SHADOW_MOD_ITEMS.map(([k, n]) => `<label style="display:block"><input type="checkbox" class="shmod-cb" data-k="${k}"> ${n}</label>`).join('');
+  box.querySelectorAll('.shmod-cb').forEach(cb => {
+    cb.addEventListener('change', () => { SHADOW_MOD[cb.dataset.k] = cb.checked; applyShadowMod(); });
+    cb.addEventListener('keydown', e => e.stopPropagation());
+  });
+  ref.after(box);
+});
+applyShadowMod();
 let brightLevel = 50; // 0=暗い(0.5倍) 50=普通(1倍) 100=明るい(2倍)
 try { const v = parseInt(localStorage.getItem('voxelcraft.brightness'), 10); if (v >= 0 && v <= 100) brightLevel = v; } catch (_) {}
 function applyBrightness() {
@@ -6740,6 +7944,55 @@ function buildMobModel(type) {
   return { group: g, mats, parts };
 }
 
+// ---- F3+B: 当たり判定の表示（白=当たり判定の箱、赤=目線の高さの板、青=視線方向） ----
+const HB_MAX_BOXES = 320, HB_MAX_VERTS = HB_MAX_BOXES * 24 + 2000;
+const hbPos = new Float32Array(HB_MAX_VERTS * 3), hbCol = new Float32Array(HB_MAX_VERTS * 3);
+const hbGeo = new THREE.BufferGeometry();
+hbGeo.setAttribute('position', new THREE.BufferAttribute(hbPos, 3).setUsage(THREE.DynamicDrawUsage));
+hbGeo.setAttribute('color', new THREE.BufferAttribute(hbCol, 3).setUsage(THREE.DynamicDrawUsage));
+const hbLines = new THREE.LineSegments(hbGeo, new THREE.LineBasicMaterial({ vertexColors: true }));
+hbLines.frustumCulled = false; hbLines.renderOrder = 998; hbLines.visible = false;
+scene.add(hbLines);
+let hbN = 0;
+function hbSeg(x0, y0, z0, x1, y1, z1, c) {
+  if (hbN + 2 > HB_MAX_VERTS) return;
+  let o = hbN * 3;
+  hbPos[o] = x0; hbPos[o + 1] = y0; hbPos[o + 2] = z0; hbCol[o] = c[0]; hbCol[o + 1] = c[1]; hbCol[o + 2] = c[2];
+  o += 3;
+  hbPos[o] = x1; hbPos[o + 1] = y1; hbPos[o + 2] = z1; hbCol[o] = c[0]; hbCol[o + 1] = c[1]; hbCol[o + 2] = c[2];
+  hbN += 2;
+}
+function hbBox(x0, y0, z0, x1, y1, z1, c) { // 12本の辺
+  hbSeg(x0, y0, z0, x1, y0, z0, c); hbSeg(x1, y0, z0, x1, y0, z1, c); hbSeg(x1, y0, z1, x0, y0, z1, c); hbSeg(x0, y0, z1, x0, y0, z0, c);
+  hbSeg(x0, y1, z0, x1, y1, z0, c); hbSeg(x1, y1, z0, x1, y1, z1, c); hbSeg(x1, y1, z1, x0, y1, z1, c); hbSeg(x0, y1, z1, x0, y1, z0, c);
+  hbSeg(x0, y0, z0, x0, y1, z0, c); hbSeg(x1, y0, z0, x1, y1, z0, c); hbSeg(x1, y0, z1, x1, y1, z1, c); hbSeg(x0, y0, z1, x0, y1, z1, c);
+}
+function updateHitboxes() {
+  if (!hitboxOn || !playing) { hbLines.visible = false; return; }
+  hbN = 0;
+  const WHITE = [1, 1, 1], RED = [1, 0.1, 0.1], BLUE = [0.2, 0.4, 1];
+  const px = player.pos.x, pz = player.pos.z, R2 = 48 * 48;
+  for (const m of mobs) {
+    const dx = m.pos.x - px, dz = m.pos.z - pz;
+    if (dx * dx + dz * dz > R2) continue;
+    const r = m.d.r, h = m.d.h, x = m.pos.x, y = m.pos.y, z = m.pos.z;
+    hbBox(x - r, y, z - r, x + r, y + h, z + r, WHITE);
+    const ey = y + (m.d.eye !== undefined ? m.d.eye : h * 0.9); // 目線の高さ（赤い板）
+    hbSeg(x - r, ey, z - r, x + r, ey, z - r, RED); hbSeg(x + r, ey, z - r, x + r, ey, z + r, RED);
+    hbSeg(x + r, ey, z + r, x - r, ey, z + r, RED); hbSeg(x - r, ey, z + r, x - r, ey, z - r, RED);
+    hbSeg(x - r, ey, z - r, x + r, ey, z + r, RED); hbSeg(x + r, ey, z - r, x - r, ey, z + r, RED);
+    hbSeg(x, ey, z, x + Math.sin(m.yaw) * 2, ey, z + Math.cos(m.yaw) * 2, BLUE); // 視線方向（長さ2ブロック）
+  }
+  for (const e of itemEntities) {
+    const dx = e.pos.x - px, dz = e.pos.z - pz;
+    if (dx * dx + dz * dz > R2) continue;
+    hbBox(e.pos.x - 0.125, e.pos.y, e.pos.z - 0.125, e.pos.x + 0.125, e.pos.y + 0.25, e.pos.z + 0.125, WHITE); // アイテムは0.25四方
+  }
+  hbGeo.setDrawRange(0, hbN);
+  hbGeo.attributes.position.needsUpdate = true; hbGeo.attributes.color.needsUpdate = true;
+  hbLines.visible = true;
+}
+
 // ---- 生成・削除 ----
 function spawnMob(type, x, y, z) {
   const d = MOB_DEFS[type], mdl = buildMobModel(type);
@@ -6784,6 +8037,11 @@ function moveMob(m, dt) {
   if (!mobHits(m.pos.x, m.pos.y, nz, r, h)) m.pos.z = nz; else if (Math.abs(m.wz) > 0.01) blocked = true;
   const feetW = mobInFluid(m, 0.1), headW = mobInFluid(m, h * 0.7);
   m.inWater = feetW;
+  if (feetW && m.dead === 0 && getBlock(Math.floor(m.pos.x), Math.floor(m.pos.y + 0.1), Math.floor(m.pos.z)) === BLOCK.LAVA) { // 溶岩の中では0.5秒ごとに4ダメージ
+    m.lavaT = (m.lavaT || 0) + dt;
+    if (m.lavaT >= 0.5) { m.lavaT = 0; damageMob(m, 4, m.pos.x, m.pos.z, 0); }
+    m.fire = 15; // 溶岩に触れたMobも燃える（水に入ると消える）
+  }
   if (feetW) { m.vy += ((headW ? 1.6 : -0.8) - m.vy) * Math.min(1, dt * 6); }
   else { m.vy -= MOB_GRAVITY * dt; if (m.vy < -40) m.vy = -40; }
   if (blocked && m.onGround && !feetW && m.dead === 0) { m.vy = MOB_JUMP; m.onGround = false; } // 段差・壁は跳び越える
@@ -6834,7 +8092,7 @@ function killMob(m) {
     const f = randInt(0, 2); if (f) spawnItem('rotten_flesh', f, x, y, z, { spread: true });
     if (Math.random() < 0.025) spawnItem('iron_ingot', 1, x, y, z, { spread: true });
   }
-  if (gameMode === 'survival' && performance.now() / 1000 - m.byPlayer < 5) addXp(m.type === 'zombie' ? 5 : randInt(1, 3));
+  if (gameMode === 'survival' && performance.now() / 1000 - m.byPlayer < 5) spawnXpOrbs(m.type === 'zombie' ? 5 : randInt(1, 3), x, y + 0.3, z);
 }
 
 // ---- プレイヤーの攻撃 ----
@@ -6874,12 +8132,38 @@ function mobAtCrosshair(reach) {
   }
   return best;
 }
+// ---- 攻撃クールダウン（本家1.9+準拠） ----
+// 武器ごとの攻撃速度(回/秒)。チャージ完了までの時間 = 1 / 攻撃速度
+function attackSpeedFor() {
+  const t = heldTool();
+  if (!t) return 4;
+  if (t.type === 'sword') return 1.6;
+  if (t.type === 'axe') return t.mat === 'iron' ? 0.9 : (t.mat === 'wood' || t.mat === 'stone') ? 0.8 : 1.0;
+  if (t.type === 'pickaxe') return 1.2;
+  return 1.0; // シャベル
+}
+let attackTimer = 99, lastAtkHeldId = null; // 最後の攻撃(または持ち替え)からの秒数
+function attackStrength() { return Math.min(1, attackTimer * attackSpeedFor()); } // 0〜1
+function updateAttackCooldown(dt) {
+  attackTimer += dt;
+  const st = inv[selectedSlot], id = st ? st.id : null;
+  if (id !== lastAtkHeldId) { lastAtkHeldId = id; attackTimer = 0; } // 持ち替えるとリセット（本家同様）
+  const ind = document.getElementById('atk-ind');
+  if (ind) {
+    const s = attackStrength();
+    ind.style.display = s < 1 ? 'block' : 'none';
+    if (s < 1) ind.firstElementChild.style.width = (s * 100) + '%';
+  }
+}
 function playerAttack(m) {
-  let dmg = attackDamageFor();
-  if (!player.onGround && player.vel.y < -0.5 && !player.flying && !player.underwater) dmg *= 1.5; // 落下しながらのクリティカル
+  const s = attackStrength();
+  let dmg = attackDamageFor() * (0.2 + s * s * 0.8); // チャージ不足だと最大8割減
   const sprint = isSprinting && keys['KeyW'];
+  // 落下しながらのクリティカル（本家同様、ほぼ満チャージのときだけ）
+  if (s > 0.9 && !player.onGround && player.vel.y < -0.5 && !player.flying && !player.underwater) dmg *= 1.5;
   m.byPlayer = performance.now() / 1000;
-  damageMob(m, dmg, player.pos.x, player.pos.z, sprint ? 10 : 7);
+  damageMob(m, dmg, player.pos.x, player.pos.z, sprint && s > 0.9 ? 10 : 7);
+  attackTimer = 0;
   triggerArmSwing();
   if (gameMode === 'survival') {
     const st = inv[selectedSlot];
@@ -6904,10 +8188,50 @@ function wearArmor(dmg) { // 被弾で全部位の耐久が減る（本家: max(
   }
   render();
 }
+// ---- 盾 ----
+// 右クリック長押しで構える（オフハンド、またはメインハンドの盾）。使える物を持っているときはそちらが優先。
+const SHIELD_RAISE_DELAY = 0.25; // 構えてから防御が有効になるまで（本家5tick）
+const SHIELD_RAISE_SLOW = 0.2; // 構え中の移動速度倍率（本家のアイテム使用中と同じ20%）
+let shieldTime = 0, shieldRaise = 0;
+function shieldHand() { // 構えられる盾があれば 'off' / 'main'、なければ null
+  if (offhand[0] && offhand[0].id === 'shield') return 'off';
+  const st = inv[selectedSlot];
+  return st && st.id === 'shield' ? 'main' : null;
+}
+function isRaisingShield() {
+  if (!locked || player.dead || !mouseRight || !shieldHand()) return false;
+  return !useOffhand() && !mainHandActs(); // メインハンドの物が今使えない（ブロックが置けない等）ときに構える
+}
+function isBlocking() { return isRaisingShield() && shieldTime >= SHIELD_RAISE_DELAY; }
+function updateShield(dt) {
+  shieldTime = isRaisingShield() ? shieldTime + dt : 0;
+  shieldRaise += ((shieldTime > 0 ? 1 : 0) - shieldRaise) * Math.min(1, dt * 18); // 左手の上げ下げ表示用
+}
+// 正面(前方180度)からの攻撃なら防いで true。サバイバルでは盾の耐久が減る（3以上のダメージで 1+ダメージ）
+function shieldBlocks(m, dmg) {
+  if (!isBlocking()) return false;
+  const ax = m.pos.x - player.pos.x, az = m.pos.z - player.pos.z;
+  camera.getWorldDirection(_mobDir);
+  if (ax * _mobDir.x + az * _mobDir.z <= 0) return false; // 背後からは防げない
+  SFX.shieldBlock();
+  const l = Math.hypot(ax, az) || 1;
+  m.kbx = ax / l * 4; m.kbz = az / l * 4; // 攻撃した側を押し返す
+  if (gameMode === 'survival' && dmg >= 3) {
+    const useOff = shieldHand() === 'off', st = useOff ? offhand[0] : inv[selectedSlot];
+    st.dmg = (st.dmg || 0) + 1 + Math.floor(dmg);
+    if (st.dmg >= ITEMS.shield.adur) {
+      if (useOff) offhand[0] = null; else inv[selectedSlot] = null;
+      showItemName('盾が壊れた'); SFX.toolBreak();
+    }
+    syncHotbar(true); render();
+  }
+  return true;
+}
 function mobHitsPlayer(m, dx, dz, hd) {
+  if (shieldBlocks(m, m.d.dmg)) return; // 盾で防いだ: ダメージ・ノックバックなし
   const dmg = Math.max(1, Math.round(m.d.dmg * (1 - armorReduction())));
   const before = player.health;
-  applyDamage(dmg, 'ゾンビに倒された');
+  applyDamage(dmg, 'ゾンビに倒された', m.pos);
   if (player.health < before) {
     wearArmor(dmg);
     const l = hd || 1;
@@ -6965,6 +8289,10 @@ function updateMob(m, dt) {
     }
     if (m.sun) { m.burnT += dt; if (m.burnT >= 1) { m.burnT = 0; damageMob(m, 1, m.pos.x, m.pos.z, 0); } }
   }
+  if (m.fire > 0) { // 燃えているMob: 毎秒1ダメージ、水に入ると消火
+    if (getBlock(Math.floor(m.pos.x), Math.floor(m.pos.y + 0.1), Math.floor(m.pos.z)) === BLOCK.WATER) { m.fire = 0; m.fireT = 0; }
+    else { m.fire -= dt; m.fireT = (m.fireT || 0) + dt; if (m.fireT >= 1) { m.fireT = 0; damageMob(m, 1, m.pos.x, m.pos.z, 0); } }
+  }
   // 鳴き声
   m.snd -= dt;
   if (m.snd <= 0) {
@@ -6996,7 +8324,7 @@ function syncMob(m, dt) {
     m.brightT = liftLight(Math.max(lightCurve(Math.max(0, s - lightUniforms.uDark.value)), lightCurve(b)));
   }
   m.bright += ((m.brightT === undefined ? 1 : m.brightT) - m.bright) * Math.min(1, dt * 6);
-  const hf = m.dead > 0 ? 0.85 : Math.min(1, m.hurt / 0.35), fire = m.sun ? (0.5 + 0.5 * Math.sin(mobClock * 14)) * 0.35 : 0;
+  const hf = m.dead > 0 ? 0.85 : Math.min(1, m.hurt / 0.35), fire = (m.sun || m.fire > 0) ? (0.5 + 0.5 * Math.sin(mobClock * 14)) * 0.35 : 0;
   const br = m.bright;
   const cr = br, cg = br * (1 - hf * 0.65 - fire * 0.4), cb = br * (1 - hf * 0.7 - fire * 0.8);
   for (const x of m.mats) x.color.setRGB(cr, cg, cb);
@@ -7128,6 +8456,8 @@ function updateMobs(dt) {
   if (!playing || !locked) return;
   mobClock += dt;
   mobAttackCd -= dt;
+  updateAttackCooldown(dt);
+  updateShield(dt);
   if (!player.dead && mouseLeft && mobAttackCd <= 0) {
     const tgt = mobAtCrosshair(gameMode === 'creative' ? 5 : 3.5);
     if (tgt) { playerAttack(tgt); mobAttackCd = 0.5; }
@@ -7221,11 +8551,14 @@ function animate() {
   // キューにあるチャンクを少数ずつ処理する（フレームが止まらないよう常に呼ぶ）
   processChunkQueues();
 
+  updateHitboxes(); // F3+B: 当たり判定の線枠
+
   // 視点が向いているブロックのアウトライン更新
   if (locked) {
     const dir = new THREE.Vector3();
     camera.getWorldDirection(dir);
     const hit = raycastVoxel(camera.position, dir, 7);
+    targetHitInfo = hit || null;
     if (hit) {
       blockOutline.position.set(hit.x + 0.5, hit.y + 0.5, hit.z + 0.5);
       blockOutline.visible = true;
@@ -7234,6 +8567,7 @@ function animate() {
     }
   } else {
     blockOutline.visible = false;
+    targetHitInfo = null;
   }
 
   // チャンク単位のフラスタムカリング: 視界に入っていないチャンクを描画対象から除外する
@@ -7244,15 +8578,20 @@ function animate() {
   updatePlacing(dt);
   updateEating(dt);
   updateItemEntities(dt);
+  updateProjectiles(dt);
+  updateXpOrbs(dt);
   updateMobs(dt);
   updateAmbient(dt);
   updateFallingBlocks(dt);
   updateLeafDecay();
+  updateIceMelt(dt);
   updateSaplings();
   Particles.update(dt);
   updateFurnaces(dt);
   updateDayNight(dt);
   updateUnderwaterView(dt);
+  updateLavaView(dt);
+  updateLavaGlow();
   updateArmSwing(dt);
 
   // 水の流動シミュレーション: 待機中の広がりタスクのうち、時間が来たものを処理する
@@ -7267,6 +8606,45 @@ function animate() {
     fpsTimer = 0; fpsCount = 0;
   }
   coordsEl.textContent = `${player.pos.x.toFixed(1)}, ${player.pos.y.toFixed(1)}, ${player.pos.z.toFixed(1)}`;
+  if (debugOn) {
+    const bx = Math.floor(player.pos.x), by = Math.floor(player.pos.y), bz = Math.floor(player.pos.z);
+    const mod = v => ((v % CHUNK_SIZE) + CHUNK_SIZE) % CHUNK_SIZE;
+    blockPosEl.textContent = `${bx} ${by} ${bz}`;
+    chunkPosEl.textContent = `${mod(bx)} ${by} ${mod(bz)}（チャンク ${Math.floor(bx / CHUNK_SIZE)} ${Math.floor(bz / CHUNK_SIZE)}）`;
+    // 向き: 本家準拠（東=+X・南=+Z）。yawは南=0°・西=90°・北=±180°、pitchは下向きが正
+    const fx = -Math.sin(player.yaw), fz = -Math.cos(player.yaw);
+    let yawDeg = (player.yaw * 180 / Math.PI + 180) % 360; if (yawDeg >= 180) yawDeg -= 360; if (yawDeg < -180) yawDeg += 360;
+    const pitchDeg = -player.pitch * 180 / Math.PI;
+    facingEl.textContent = (Math.abs(fx) > Math.abs(fz) ? (fx > 0 ? '東 (X+)' : '西 (X-)') : (fz > 0 ? '南 (Z+)' : '北 (Z-)'))
+      + `（${yawDeg.toFixed(1)} / ${pitchDeg.toFixed(1)}）`;
+    biomeInfoEl.textContent = biomeLabelAt(bx, bz);
+    dayInfoEl.textContent = String(dayCount);
+    if (targetHitInfo) {
+      const t = targetHitInfo, id = getBlock(t.x, t.y, t.z), nm = blockNames[id] || ('ID ' + id);
+      targetInfoEl.textContent = `${t.x} ${t.y} ${t.z}`;
+      dbgBlockEl.textContent = `${nm}（ID ${id}）`;
+      const n = t.normal;
+      dbgFaceEl.textContent = n.y > 0 ? '上 (Y+)' : n.y < 0 ? '下 (Y-)' : n.x > 0 ? '東 (X+)' : n.x < 0 ? '西 (X-)' : n.z > 0 ? '南 (Z+)' : '北 (Z-)';
+      dbgDistEl.textContent = Math.hypot(t.x + 0.5 - camera.position.x, t.y + 0.5 - camera.position.y, t.z + 0.5 - camera.position.z).toFixed(1);
+    } else {
+      targetInfoEl.textContent = 'なし'; dbgBlockEl.textContent = 'なし'; dbgFaceEl.textContent = '--'; dbgDistEl.textContent = '--';
+    }
+    // 右側: 画面・GPU・メモリ（メモリは0.5秒ごと。Chrome系のみ取得可）
+    dbgDisplayEl.textContent = `${window.innerWidth}x${window.innerHeight}（x${(window.devicePixelRatio || 1).toFixed(2)}）`;
+    if (dbgGpuText === null) {
+      try {
+        const gl = renderer.getContext(), ext = gl.getExtension('WEBGL_debug_renderer_info');
+        dbgGpuText = String(ext ? gl.getParameter(ext.UNMASKED_RENDERER_WEBGL) : gl.getParameter(gl.RENDERER));
+      } catch (err) { dbgGpuText = '不明'; }
+      dbgGpuEl.textContent = dbgGpuText;
+    }
+    const nowMs = performance.now();
+    if (nowMs - dbgMemAt > 500) {
+      dbgMemAt = nowMs;
+      const pm = performance.memory;
+      dbgMemEl.textContent = pm ? `${Math.round(pm.usedJSHeapSize / 1048576)} / ${Math.round(pm.jsHeapSizeLimit / 1048576)} MB（${Math.round(pm.usedJSHeapSize / pm.jsHeapSizeLimit * 100)}%）` : 'このブラウザでは取得不可';
+    }
+  }
   chunkCountEl.textContent = `${loadedChunks.size} (演算) / ${chunkMeshGroups.size} (描画)`;
   visibleChunkCountEl.textContent = visibleChunkCount;
   {
@@ -7277,12 +8655,14 @@ function animate() {
   queueCountEl.textContent = `${chunkGenQueue.length} (生成待ち) / ${chunkMeshQueue.length} (描画待ち)`;
 
   const bobbed = applyViewBob();
-  const heldVis = heldItemGroup.visible, outVis = blockOutline.visible;
+  const heldVis = heldItemGroup.visible, outVis = blockOutline.visible, offArmVis = offArmGroup.visible, offItemVis = offItemGroup.visible;
+  if (hudHidden || TW.on) { offArmGroup.visible = false; offItemGroup.visible = false; }
   if (hudHidden) { armGroup.visible = false; heldItemGroup.visible = false; blockOutline.visible = false; } // F1: 手・アウトラインも隠す
   const twArm = armGroup.visible, twHeld = heldItemGroup.visible;
   if (TW.on) { armGroup.visible = false; heldItemGroup.visible = false; } // 背景ワールドでは手を出さない
   if (!TW.on || mcView === 'main') renderer.render(scene, camera);       // 設定などの画面では描画を休む
   if (TW.on) { armGroup.visible = twArm; heldItemGroup.visible = twHeld; }
+  offArmGroup.visible = offArmVis; offItemGroup.visible = offItemVis;
   if (shotRequested) { // F2: 描画直後のキャンバスをPNGで保存
     shotRequested = false;
     renderer.domElement.toBlob(b => {
